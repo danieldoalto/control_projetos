@@ -6,23 +6,57 @@ import sys
 from typing import List, Optional
 
 from ctrl_prj.config import ConfigError, load_config
+from ctrl_prj.memory import Database
+from ctrl_prj.scanner import ScanResult, run_scan
 
 
 def cmd_scan(args: argparse.Namespace) -> int:
     """Descobre e atualiza o estado do filesystem."""
-    print(f"Executing 'scan' with config: {args.config}...")
+    config = getattr(args, "app_config", None)
+    if not config:
+        config = load_config(args.config)
+
+    if not config.roots:
+        print("Nenhuma raiz ('roots') configurada para escanear.")
+        print("Adicione raízes no seu arquivo config.yml.")
+        return 0
+
+    db = Database(config.database.path)
+    print("🔍 Iniciando varredura do filesystem...")
+    result: ScanResult = run_scan(config, db)
+
+    print(f"📁 Raízes processadas: {result.roots_scanned}")
+    print(f"📦 Total de entidades encontradas: {result.total_entities}")
+    print(f"   ✨ Novas: {result.new_count}")
+    print(f"   🔄 Modificadas: {result.changed_count}")
+    print(f"   ✔️  Inalteradas: {result.unchanged_count}")
+    if result.missing_count > 0:
+        print(f"   ⚠️  Ausentes no filesystem: {result.missing_count}")
+    print(f"📄 Total de arquivos catalogados: {result.total_files}")
+
+    # Exibe resumo de entidades se houver novidades
+    if result.entity_summaries:
+        for ent in result.entity_summaries:
+            if ent.status == "new":
+                print(f"  [+] Nova entidade: {ent.name} ({ent.type}) -> {ent.files_count} arquivos")
+            elif ent.status == "changed":
+                print(f"  [*] Entidade modificada: {ent.name} ({ent.type})")
+            elif ent.status == "missing":
+                print(f"  [-] Entidade não encontrada (missing): {ent.name}")
+
+    print("✅ Varredura concluída com sucesso.")
     return 0
 
 
 def cmd_analyze(args: argparse.Namespace) -> int:
     """Analisa entidades novas ou modificadas."""
-    print(f"Executing 'analyze' with config: {args.config}...")
+    print("Executing 'analyze'...")
     return 0
 
 
 def cmd_report(args: argparse.Namespace) -> int:
     """Gera os relatórios Markdown."""
-    print(f"Executing 'report' with config: {args.config}...")
+    print("Executing 'report'...")
     return 0
 
 

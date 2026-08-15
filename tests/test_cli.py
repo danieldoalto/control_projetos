@@ -10,12 +10,12 @@ def test_cli_help(capsys):
     assert "ctrl_prj" in captured.out or "usage:" in captured.out
 
 
-def test_cli_scan(capsys):
-    """Verifica o comando scan."""
+def test_cli_scan_default(capsys):
+    """Verifica o comando scan sem arquivo de configuração personalizado."""
     exit_code = main(["scan"])
     assert exit_code == 0
     captured = capsys.readouterr()
-    assert "Executing 'scan'" in captured.out
+    assert "Nenhuma raiz" in captured.out or "varredura" in captured.out.lower()
 
 
 def test_cli_analyze(capsys):
