@@ -1,0 +1,89 @@
+# ==============================================================================
+# ctrl_prj - Exemplo de Arquivo de Configuração (config.yml)
+# ==============================================================================
+
+# Configurações do Scanner e Descoberta de Projetos
+scan:
+  # Lista de diretórios raízes a serem inspecionados (o ~ é expandido para o home do usuário)
+  roots:
+    - ~/projetos
+    - ~/scripts
+
+  # Diretórios ou padrões que o scanner deve ignorar por padrão
+  exclusions:
+    - .git
+    - node_modules
+    - .venv
+    - venv
+    - __pycache__
+    - target
+    - dist
+    - build
+    - coverage
+    - .cache
+
+  # Extensões de arquivos de código reconhecidas para análise estrutural
+  code_extensions:
+    - .py
+    - .rs
+    - .sh
+    - .bash
+    - .js
+    - .mjs
+    - .cjs
+    - .ts
+    - .tsx
+
+  # Arquivos de contexto e metadados que auxiliam na identificação do projeto
+  context_files:
+    - README.md
+    - pyproject.toml
+    - requirements.txt
+    - Cargo.toml
+    - package.json
+    - tsconfig.json
+    - Dockerfile
+    - "*.yaml"
+    - "*.yml"
+    - "*.json"
+    - "*.toml"
+    - "*.sql"
+    - Makefile
+
+  # Define se o scanner deve seguir links simbólicos (padrão: false)
+  follow_symlinks: false
+
+# Configurações do Banco de Dados SQLite (Persistência)
+database:
+  # Caminho do arquivo SQLite onde o estado e análises serão salvos
+  path: ~/.ctrl_prj/data.db
+
+# Configurações de Fingerprint e Hashing
+fingerprint:
+  # Algoritmo de hash utilizado para arquivos e entidades (padrão: sha256)
+  algorithm: sha256
+
+# Configurações do Provedor de LLM
+llm:
+  # Provedor desejado: openai, anthropic, openrouter, ollama, lmstudio
+  provider: openai
+
+  # Identificador do modelo a ser utilizado
+  model: gpt-4o-mini
+
+  # Nome da variável de ambiente que contém a chave da API (NÃO COLOQUE A CHAVE DIRETAMENTE AQUI)
+  api_key_env: OPENAI_API_KEY
+
+  # Temperatura do modelo (0.0 a 2.0 - menor valor = mais determinístico)
+  temperature: 0.0
+
+  # Limite máximo de tokens de resposta
+  max_tokens: 2000
+
+  # URL base (obrigatória/útil para provedores locais como Ollama, LM Studio ou endpoints personalizados)
+  # base_url: http://localhost:11434/v1
+
+# Configurações de Geração de Relatórios
+reporter:
+  # Diretório onde os relatórios Markdown (INDEX.md e relatórios de projetos) serão gerados
+  output_dir: reports
