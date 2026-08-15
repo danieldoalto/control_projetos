@@ -1,7 +1,7 @@
-"""Modelos de dados para análise estrutural de arquivos."""
+"""Modelos de dados para análise estrutural e construção de contexto para o LLM."""
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 @dataclass(frozen=True)
@@ -26,4 +26,26 @@ class FileStructure:
             "classes": self.classes,
             "functions": self.functions,
             "exports": self.exports,
+        }
+
+
+@dataclass
+class LLMContext:
+    """Contexto estruturado e otimizado preparado para envio ao LLM Provider."""
+    operation: str  # 'initial' ou 'update'
+    entity_info: Dict[str, Any]
+    file_structure: Dict[str, Dict[str, Any]]
+    context_files_content: Dict[str, str]
+    previous_analysis: Optional[Dict[str, Any]] = None
+    changes: Optional[Dict[str, Any]] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serializa o contexto completo em formato de dicionário limpo."""
+        return {
+            "operation": self.operation,
+            "entity": self.entity_info,
+            "previous_analysis": self.previous_analysis,
+            "changes": self.changes,
+            "file_structure": self.file_structure,
+            "context_files": self.context_files_content,
         }
