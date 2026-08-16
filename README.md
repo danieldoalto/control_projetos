@@ -1,69 +1,75 @@
 # `ctrl_prj`
 
-Catalogador contínuo, determinístico e inteligente de projetos e códigos no filesystem.
+Catalogador contínuo, determinístico e inteligente de projetos e códigos no filesystem com enriquecimento via IA e relatórios integrados para Obsidian.
 
 ---
 
 ## 🎯 Objetivo e Visão Geral
 
-`ctrl_prj` localiza, categoriza, analisa estruturalmente e mantém uma memória persistente de projetos, coleções e scripts distribuídos em diferentes locais do sistema de arquivos.
+`ctrl_prj` localiza, categoriza, analisa estruturalmente e mantém uma memória persistente de projetos, coleções e scripts distribuídos pelo sistema de arquivos.
 
-O sistema opera de forma estritamente **incremental** e **econômica**: apenas arquivos relevantes novos ou modificados passam por análise semântica via IA (LLM), persistindo tudo em banco SQLite e gerando relatórios Markdown descartáveis e recriáveis.
+O sistema opera de forma estritamente **incremental** e **econômica**:
+- Apenas arquivos relevantes novos ou modificados passam por análise semântica via IA (LLM).
+- O estado e o histórico de alterações são persistidos em um banco de dados SQLite local.
+- Relatórios Markdown derivados são gerados prontos para visualização e navegação em vaults do **Obsidian** (com tags semânticas e índice interativo TOC).
 
 ---
 
 ## 🧱 Princípios de Design
 
 * **Simplicidade & Determinismo:** Fingerprint SHA-256 reprodutível (`relative_path + file_hash`).
-* **Modularidade Estrita:** Separação clara de responsabilidades (*Scanner* coleta fatos → *Analyzer* prepara contexto → *LLM* interpreta → *SQLite* memoriza → *Reporter* apresenta).
-* **Incrementalidade Real:** Se o fingerprint não mudou, o LLM não é chamado.
-* **Economia de Tokens:** Envio apenas de metadados estruturais leves (AST/imports/classes/funções) e arquivos de contexto essenciais (README, pyproject, etc.).
+* **Modularidade Estrita:** Separação clara de responsabilidades (*Scanner* coleta fatos → *Analyzer* prepara contexto estrutural → *LLM* interpreta → *SQLite* memoriza → *Reporter* apresenta).
+* **Incrementalidade Real:** Se o fingerprint da entidade não mudou, o LLM não é chamado.
+* **Economia de Tokens:** Envio apenas de metadados estruturais leves (AST, imports, classes, funções) e arquivos de contexto essenciais (README, pyproject, package.json, Dockerfile, etc.).
+* **Tags Orientadas ao Domínio:** A IA sintetiza tags conceituais que resumem o propósito e a funcionalidade central do projeto.
 
 ---
 
 ## 🏗️ Arquitetura
 
 ```text
-                    ┌──────────────┐
-                    │  config.yml  │
-                    └──────┬───────┘
-                           │
-                           ▼
-                    ┌──────────────┐
-                    │    SCAN      │ ── (Coleta fatos, calcula hashes)
-                    └──────┬───────┘
-                           │
-                           ▼
-                    ┌──────────────┐
-                    │   SQLite     │ ── (Memoriza estado e histórico)
-                    └──────┬───────┘
-                           │  (new / changed)
-                           ▼
-                    ┌──────────────┐
-                    │   ANALYZE    │ ── (Monta contexto otimizado)
-                    └──────┬───────┘
-                           │
-                           ▼
-                    ┌──────────────┐
-                    │ LLM Provider │ ── (Interpretação e validação de schema)
-                    └──────┬───────┘
-                           │
-                           ▼
-                    ┌──────────────┐
-                    │   SQLite     │ ── (Grava análises consolidadas)
-                    └──────┬───────┘
-                           │
-                           ▼
-                    ┌──────────────┐
-                    │   REPORT     │ ── (Gera Markdown derivado)
-                    └──────┬───────┘
-                           │
-                           ▼
-                 reports/
-                 ├── INDEX.md
-                 └── projects/
-                     ├── meu-projeto.md
-                     └── ...
+                    ┌─────────────────────────┐
+                    │ config.yml / .env       │
+                    └────────────┬────────────┘
+                                 │
+                                 ▼
+                    ┌─────────────────────────┐
+                    │          SCAN           │ ── (Varre roots e individual_projects,
+                    └────────────┬────────────┘     calcula hashes e fingerprints)
+                                 │
+                                 ▼
+                    ┌─────────────────────────┐
+                    │         SQLite          │ ── (Memoriza estado, delta e histórico)
+                    └────────────┬────────────┘
+                                 │  (status: new / changed / error)
+                                 ▼
+                    ┌─────────────────────────┐
+                    │         ANALYZE         │ ── (Monta payload leve e estruturado)
+                    └────────────┬────────────┘
+                                 │
+                                 ▼
+                    ┌─────────────────────────┐
+                    │      LLM Provider       │ ── (Interpretação semântica, validação
+                    │ (OpenRouter/OpenAI/...) │     de schema e tags de objetivo)
+                    └────────────┬────────────┘
+                                 │
+                                 ▼
+                    ┌─────────────────────────┐
+                    │         SQLite          │ ── (Grava análises consolidadas)
+                    └────────────┬────────────┘
+                                 │
+                                 ▼
+                    ┌─────────────────────────┐
+                    │         REPORT          │ ── (Gera Markdown com frontmatter,
+                    └────────────┬────────────┘     tags e TOC para Obsidian)
+                                 │
+                                 ▼
+                  reports/
+                  ├── {device}-INDEX.md
+                  └── projects/
+                      ├── {device}-{projeto-1}.md
+                      ├── {device}-{projeto-2}.md
+                      └── ...
 ```
 
 ---
@@ -83,47 +89,126 @@ uv sync
 
 ---
 
-## ⚙️ Configuração (`config.yml`)
+## ⚙️ Configuração (`config.yml` e `.env`)
 
-Copie o arquivo de exemplo para criar a sua configuração local:
+### 1. Variáveis de Ambiente (`.env`)
+Copie o exemplo para configurar suas chaves de API com segurança:
+
+```bash
+cp .env.example .env
+```
+
+Preencha com a sua chave (exemplo para OpenRouter ou OpenAI):
+```env
+OPENROUTER_API_KEY=sk-or-v1-sua-chave-aqui
+OPENAI_API_KEY=sk-sua-chave-openai-aqui
+```
+
+### 2. Arquivo de Configuração (`config.yml`)
+Copie o arquivo de exemplo:
 
 ```bash
 cp config.example.yml config.yml
 ```
 
-Exemplo de estrutura:
+Estrutura das principais opções:
 
 ```yaml
-# Raízes a serem monitoradas pelo scanner
-roots:
-  - "~/projetos"
-  - "~/scripts"
+# Configurações do Scanner e Descoberta de Projetos
+scan:
+  # Pastas raízes contêineres (contêm múltiplos projetos dentro)
+  roots:
+    - ~/projetos
+    - ~/projeto-teste
 
-# Banco de dados SQLite
+  # Pastas ou scripts de projetos individuais diretos (tratados como projeto único)
+  individual_projects:
+    - ~/PowerControl
+    - ~/servicos-dashboard
+    - ~/scripts/backup.sh
+
+  # Diretórios, arquivos e padrões com wildcard a ignorar
+  exclusions:
+    - .git
+    - node_modules
+    - .venv
+    - __pycache__
+    - target
+    - dist
+    - .claude
+    - .cursor
+    - .gemini
+    - package-lock.json
+    - "*.lock"
+
+# Configurações de Persistência no SQLite
 database:
-  path: "~/.ctrl_prj/data.db"
+  path: data.db
 
-# Provedor de LLM (openai, openrouter, ollama, lmstudio, mock)
+# Configurações do Provedor de LLM (openrouter, openai, anthropic, ollama)
 llm:
-  provider: "openai"
-  model: "gpt-4o-mini"
-  api_key_env: "OPENAI_API_KEY"
+  provider: openrouter
+  model: deepseek/deepseek-v4-flash-0731
+  api_key_env: OPENROUTER_API_KEY
   temperature: 0.0
   max_tokens: 2000
 
-# Geração de Relatórios
+# Configurações de Geração de Relatórios Markdown
 reporter:
-  output_dir: "./reports"
-
-# Exclusões padrão
-exclusions:
-  - ".git"
-  - "node_modules"
-  - ".venv"
-  - "__pycache__"
-  - "target"
-  - "dist"
+  output_dir: reports
+  device: mac-cachyos  # Identificador deste computador/nó (usado como prefixo)
 ```
+
+---
+
+## 📑 Formato dos Relatórios Gerados
+
+Todos os relatórios gerados são otimizados para navegação visual e busca por tags no **Obsidian**:
+
+### 1. Relatório Individual (`reports/projects/{device}-{projeto}.md`)
+```markdown
+---
+tags:
+  - control_project
+  - {tag_conceitual_1}
+  - {tag_conceitual_2}
+  - {tag_conceitual_3}
+  - {tag_conceitual_4}
+Titulo: Nome do Projeto
+Data: 2026-08-16
+Resumo: Resumo claro sobre a finalidade e problema que o projeto resolve.
+---
+
+```table-of-contents
+title: 
+style: nestedList # TOC style (nestedList|nestedOrderedList|inlineFirstLevel)
+includeLinks: true # Make headings clickable
+hideWhenEmpty: false # Hide TOC if no headings are found
+debugInConsole: false # Print debug info in Obsidian console
+```
+
+# Nome do Projeto
+> Resumo executivo da análise.
+
+## 📋 Visão Geral
+- **Tipo Semântico:** `service`
+- **Caminho no Filesystem:** `/home/usuario/meu_projeto`
+- **Status:** `analyzed`
+- **Última Análise:** `2026-08-16 12:00:00`
+
+## 🎯 Propósito
+Descrição detalhada do objetivo do projeto.
+
+## 🛠️ Tecnologias e Linguagens
+...
+## 📁 Arquivos Relevantes
+...
+```
+
+### 2. Catálogo Consolidado (`reports/{device}-INDEX.md`)
+O arquivo de índice contém:
+- **Sumário Geral:** Métricas detalhadas com separação por cada raiz contêiner (`roots`) e por projetos individuais (`individual_projects`).
+- **Seções por Origem:** Blocos separados para cada pasta raiz com suas respectivas categorias semânticas, seguido da seção de projetos individuais diretos.
 
 ---
 
@@ -161,7 +246,7 @@ uv run ctrl_prj scan --force   # ou -f
 ```
 
 ### 2. `ctrl_prj analyze`
-Consulta entidades pendentes (`new` ou `changed`) no SQLite, extrai a estrutura de código, monta o contexto e executa a análise com o LLM configurado.
+Consulta entidades pendentes (`new`, `changed`, `error`) no SQLite, extrai a estrutura de código, monta o contexto e executa a análise com o LLM configurado.
 
 ```bash
 uv run ctrl_prj analyze
@@ -171,7 +256,7 @@ uv run ctrl_prj analyze --force # ou -f
 ```
 
 ### 3. `ctrl_prj report`
-Gera os relatórios individuais (`reports/projects/*.md`) e o catálogo mestre ([`reports/INDEX.md`](reports/INDEX.md)) agrupado por categorias semânticas.
+Gera os relatórios individuais (`reports/projects/{device}-*.md`) e o catálogo mestre ([`reports/{device}-INDEX.md`](reports/)) agrupado por origens e categorias semânticas.
 
 ```bash
 uv run ctrl_prj report
@@ -186,16 +271,15 @@ Executa o pipeline completo de ponta a ponta (`scan` → `analyze` → `report`)
 ```bash
 uv run ctrl_prj run
 
-# Pipeline completo forçando re-escaneamento e reanálise de tudo:
+# Pipeline completo forçando re-escaneamento e reanálise total:
 uv run ctrl_prj run --force     # ou -f
 ```
-
 
 ---
 
 ## 🧪 Testes Automatizados
 
-A suíte de testes cobre testes unitários e de integração de ponta a ponta:
+A suíte de testes cobre testes unitários, validações de configuração, mock de LLM e integração End-to-End:
 
 ```bash
 uv run pytest
@@ -207,13 +291,14 @@ uv run pytest
 
 ```text
 src/ctrl_prj/
-├── cli/          # Comandos da CLI (scan, analyze, report, run)
-├── config/       # Validação e carregamento de configurações com Pydantic
-├── discovery/    # Identificação de entidades no filesystem e heurísticas
-├── scanner/      # Varredura de arquivos e orquestração de scan
+├── cli/          # Interface CLI com argparse (scan, analyze, report, run)
+├── config/       # Validação e carregamento de configurações com Pydantic e .env
+├── discovery/    # Identificação de entidades no filesystem, heurísticas e manifestos
+├── scanner/      # Varredura de arquivos e orquestração de scan (roots e individuais)
 ├── fingerprint/  # Hashes SHA-256 e cálculo de deltas
 ├── analyzer/     # Análise estrutural leve (AST) e montagem de contexto
-├── llm/          # Abstrações de provedores LLM e validação de schema
-├── memory/       # Repositórios SQLite e persistência
-└── reporter/     # Gerador de relatórios Markdown e índice consolidado
+├── llm/          # Abstrações de provedores LLM (OpenAI, OpenRouter, Mock) e schemas
+├── memory/       # Repositórios SQLite, models e migrações de schema
+└── reporter/     # Gerador de relatórios Markdown, frontmatter, TOC e índice consolidado
 ```
+
