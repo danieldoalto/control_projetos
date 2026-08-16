@@ -1,11 +1,14 @@
-"""Funções para cálculo de hash individual de arquivos."""
+from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from typing import List, Union
+from typing import TYPE_CHECKING, List, Union
 
 from ctrl_prj.fingerprint.models import HashedFile
-from ctrl_prj.scanner.models import ScannedFile
+
+if TYPE_CHECKING:
+    from ctrl_prj.scanner.models import ScannedFile
+
 
 CHUNK_SIZE = 64 * 1024  # 64 KB
 

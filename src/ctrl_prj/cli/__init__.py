@@ -5,9 +5,13 @@ from pathlib import Path
 import sys
 from typing import List, Optional
 
+from ctrl_prj.analyzer import run_analyze
 from ctrl_prj.config import ConfigError, load_config
 from ctrl_prj.memory import Database
+from ctrl_prj.reporter import generate_reports
 from ctrl_prj.scanner import ScanResult, run_scan
+
+
 
 
 def cmd_scan(args: argparse.Namespace) -> int:
@@ -16,14 +20,16 @@ def cmd_scan(args: argparse.Namespace) -> int:
     if not config:
         config = load_config(args.config)
 
-    if not config.roots:
-        print("Nenhuma raiz ('roots') configurada para escanear.")
-        print("Adicione raízes no seu arquivo config.yml.")
+    if not config.roots and not config.individual_projects:
+        print("Nenhuma raiz ('roots') ou projeto individual ('individual_projects') configurado para escanear.")
+        print("Adicione raízes ou projetos no seu arquivo config.yml.")
         return 0
+
 
     db = Database(config.database.path)
     print("🔍 Iniciando varredura do filesystem...")
-    result: ScanResult = run_scan(config, db)
+    force = getattr(args, "force", False)
+    result: ScanResult = run_scan(config, db, force=force)
 
     print(f"📁 Raízes processadas: {result.roots_scanned}")
     print(f"📦 Total de entidades encontradas: {result.total_entities}")
@@ -49,27 +55,91 @@ def cmd_scan(args: argparse.Namespace) -> int:
 
 
 def cmd_analyze(args: argparse.Namespace) -> int:
-    """Analisa entidades novas ou modificadas."""
-    print("Executing 'analyze'...")
+    """Analisa entidades novas ou modificadas com LLM."""
+    config = getattr(args, "app_config", None)
+    if not config:
+        config = load_config(args.config)
+
+    db = Database(config.database.path)
+    force = getattr(args, "force", False)
+    if force:
+        print("🔍 Buscando TODAS as entidades para análise forçada (--force)...")
+    else:
+        print("🔍 Buscando entidades pendentes para análise...")
+
+    def on_progress(idx: int, total: int, entity, analysis_result, error_msg):
+        if error_msg:
+            print(f"  [{idx}/{total}] ⚠️  Erro ao analisar '{entity.name}': {error_msg}")
+        elif analysis_result:
+            langs = f" ({', '.join(analysis_result.languages)})" if analysis_result.languages else ""
+            print(f"  [{idx}/{total}] ✨ Analisado: {entity.name} -> Tipo: {analysis_result.type}{langs}")
+
+    result = run_analyze(config, db, on_progress=on_progress, force=force)
+
+    if result.total_pending == 0:
+        print("ℹ️  Nenhuma entidade pendente de análise (todas já analisadas ou inalteradas).")
+        if result.already_analyzed_count > 0:
+            print(f"   ({result.already_analyzed_count} entidades já estavam atualizadas no banco de dados).")
+        return 0
+
+    print("\n📊 Resumo da Análise:")
+    print(f"   ✨ Analisadas com sucesso: {result.analyzed_count}")
+    if result.error_count > 0:
+        print(f"   ⚠️  Falhas / Erros: {result.error_count}")
+    if result.already_analyzed_count > 0:
+        print(f"   ✔️  Já atualizadas anteriormente: {result.already_analyzed_count}")
+
+    if result.error_count > 0 and result.analyzed_count == 0:
+        return 1
     return 0
 
 
+
 def cmd_report(args: argparse.Namespace) -> int:
-    """Gera os relatórios Markdown."""
-    print("Executing 'report'...")
+    """Gera os relatórios Markdown a partir do estado SQLite."""
+    config = getattr(args, "app_config", None)
+    if not config:
+        config = load_config(args.config)
+
+    db = Database(config.database.path)
+    output_dir = Path(getattr(args, "output", None) or config.reporter.output_dir).expanduser().resolve()
+
+    print(f"📊 Gerando relatórios Markdown em '{output_dir}'...")
+    result = generate_reports(config, db, output_dir=output_dir)
+
+    print(f"📁 Diretório de saída: {result.output_dir}")
+    print(f"📦 Total de entidades processadas: {result.total_entities}")
+    print(f"📄 Relatórios individuais criados: {result.total_reports} em 'projects/'")
+    print(f"📚 Índice consolidado: '{result.index_path}'")
+    print("✅ Geração de relatórios concluída com sucesso.")
     return 0
 
 
 def cmd_run(args: argparse.Namespace) -> int:
     """Executa o pipeline completo: scan -> analyze -> report."""
-    print("Running complete pipeline: scan -> analyze -> report")
+    print("=" * 60)
+    print("🔍 FASE 1/3: SCAN (Varredura e Descoberta no Filesystem)")
+    print("=" * 60)
     res_scan = cmd_scan(args)
     if res_scan != 0:
+        print("\n❌ Pipeline interrompido devido a erro crítico na fase de SCAN.")
         return res_scan
-    res_analyze = cmd_analyze(args)
-    if res_analyze != 0:
-        return res_analyze
-    return cmd_report(args)
+
+    print("\n" + "=" * 60)
+    print("🧠 FASE 2/3: ANALYZE (Interpretação Semântica com LLM)")
+    print("=" * 60)
+    cmd_analyze(args)
+    # Prossegue para o report para consolidar entidades analisadas e já existentes
+
+    print("\n" + "=" * 60)
+    print("📊 FASE 3/3: REPORT (Geração de Relatórios Markdown)")
+    print("=" * 60)
+    res_report = cmd_report(args)
+
+    print("\n" + "=" * 60)
+    print("🎉 Pipeline unificado (scan -> analyze -> report) finalizado!")
+    print("=" * 60)
+    return res_report
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -92,30 +162,62 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     # scan
-    subparsers.add_parser(
+    scan_parser = subparsers.add_parser(
         "scan",
         help="Descobre e atualiza o estado do filesystem (sem LLM)",
     )
+    scan_parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="Força a sincronização e purga de arquivos excluídos em todas as entidades",
+    )
 
     # analyze
-    subparsers.add_parser(
+    analyze_parser = subparsers.add_parser(
         "analyze",
         help="Analisa entidades novas ou modificadas com LLM",
     )
+    analyze_parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="Força reanálise com LLM de todas as entidades, mesmo já analisadas",
+    )
 
     # report
-    subparsers.add_parser(
+    report_parser = subparsers.add_parser(
         "report",
         help="Gera relatórios em Markdown",
     )
+    report_parser.add_argument(
+        "-o",
+        "--output",
+        default=None,
+        help="Diretório de saída para os relatórios Markdown (padrão: reports/)",
+    )
 
     # run
-    subparsers.add_parser(
+    run_parser = subparsers.add_parser(
         "run",
         help="Executa o pipeline completo: scan -> analyze -> report",
     )
+    run_parser.add_argument(
+        "-o",
+        "--output",
+        default=None,
+        help="Diretório de saída para os relatórios Markdown (padrão: reports/)",
+    )
+    run_parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="Força re-escaneamento e reanálise de todas as entidades",
+    )
 
     return parser
+
+
 
 
 def main(argv: Optional[List[str]] = None) -> int:

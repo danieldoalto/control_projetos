@@ -1,5 +1,29 @@
+"""Testes para a interface de linha de comando (CLI)."""
+
+from pathlib import Path
 import pytest
-from ctrl_prj.cli import main, build_parser
+from ctrl_prj.cli import build_parser, main
+
+
+@pytest.fixture
+def mock_cli_config(tmp_path: Path):
+    """Gera um arquivo de configuração isolado com provider mock para testes da CLI."""
+    db_path = tmp_path / "cli_test.db"
+    config_file = tmp_path / "config.yml"
+    config_file.write_text(
+        f"""
+database:
+  path: "{db_path}"
+llm:
+  provider: "mock"
+reporter:
+  output_dir: "{tmp_path / 'reports'}"
+roots:
+  - "{tmp_path}"
+""",
+        encoding="utf-8",
+    )
+    return str(config_file)
 
 
 def test_cli_help(capsys):
@@ -10,36 +34,38 @@ def test_cli_help(capsys):
     assert "ctrl_prj" in captured.out or "usage:" in captured.out
 
 
-def test_cli_scan_default(capsys):
-    """Verifica o comando scan sem arquivo de configuração personalizado."""
-    exit_code = main(["scan"])
+def test_cli_scan_default(mock_cli_config, capsys):
+    """Verifica o comando scan."""
+    exit_code = main(["-c", mock_cli_config, "scan"])
     assert exit_code == 0
     captured = capsys.readouterr()
-    assert "Nenhuma raiz" in captured.out or "varredura" in captured.out.lower()
+    assert "varredura" in captured.out.lower() or "concluída" in captured.out.lower()
 
 
-def test_cli_analyze(capsys):
+def test_cli_analyze(mock_cli_config, capsys):
     """Verifica o comando analyze."""
-    exit_code = main(["analyze"])
+    exit_code = main(["-c", mock_cli_config, "analyze"])
     assert exit_code == 0
     captured = capsys.readouterr()
-    assert "Executing 'analyze'" in captured.out
+    assert "Buscando entidades" in captured.out or "Nenhuma entidade pendente" in captured.out
 
 
-def test_cli_report(capsys):
+def test_cli_report(mock_cli_config, capsys):
     """Verifica o comando report."""
-    exit_code = main(["report"])
+    exit_code = main(["-c", mock_cli_config, "report"])
     assert exit_code == 0
     captured = capsys.readouterr()
-    assert "Executing 'report'" in captured.out
+    assert "Gerando relatórios" in captured.out or "Índice consolidado" in captured.out
 
 
-def test_cli_run(capsys):
+def test_cli_run(mock_cli_config, capsys):
     """Verifica o comando run."""
-    exit_code = main(["run"])
+    exit_code = main(["-c", mock_cli_config, "run"])
     assert exit_code == 0
     captured = capsys.readouterr()
-    assert "Running complete pipeline" in captured.out
+    assert "FASE 1/3: SCAN" in captured.out
+    assert "FASE 2/3: ANALYZE" in captured.out
+    assert "FASE 3/3: REPORT" in captured.out
 
 
 def test_cli_invalid_config(capsys):
@@ -48,3 +74,13 @@ def test_cli_invalid_config(capsys):
     assert exit_code == 1
     captured = capsys.readouterr()
     assert "Erro de configuração" in captured.err
+
+
+def test_cli_force_flags(mock_cli_config, capsys):
+    """Verifica se flags --force funcionam para scan, analyze e run."""
+    assert main(["-c", mock_cli_config, "scan", "--force"]) == 0
+    assert main(["-c", mock_cli_config, "analyze", "--force"]) == 0
+    assert main(["-c", mock_cli_config, "run", "--force"]) == 0
+    captured = capsys.readouterr()
+    assert "FASE 1/3: SCAN" in captured.out
+

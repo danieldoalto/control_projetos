@@ -163,11 +163,60 @@ database:
 
 
 def test_cli_scan_without_roots(tmp_path, capsys):
-    """Testa comportamento da CLI quando não há roots configuradas."""
+    """Testa comportamento da CLI quando não há roots nem individual_projects configurados."""
     config_file = tmp_path / "empty_roots_config.yml"
-    config_file.write_text("scan:\n  roots: []\n", encoding="utf-8")
+    config_file.write_text("scan:\n  roots: []\n  individual_projects: []\n", encoding="utf-8")
 
     exit_code = main(["-c", str(config_file), "scan"])
     assert exit_code == 0
     captured = capsys.readouterr()
     assert "Nenhuma raiz" in captured.out
+
+
+def test_scan_with_individual_projects(tmp_path):
+    """Testa scan combinando roots e individual_projects (diretório e script isolado)."""
+    # 1. Raiz contêiner com 1 projeto
+    roots_dir = tmp_path / "container_root"
+    roots_dir.mkdir()
+    p1 = roots_dir / "p1"
+    p1.mkdir()
+    (p1 / "pyproject.toml").write_text("[project]\nname = 'p1'\n", encoding="utf-8")
+
+    # 2. Projeto individual em pasta isolada
+    indiv_proj = tmp_path / "standalone_project"
+    indiv_proj.mkdir()
+    (indiv_proj / "README.md").write_text("# Standalone Project\n", encoding="utf-8")
+    (indiv_proj / "app.py").write_text("print('standalone')\n", encoding="utf-8")
+
+    # 3. Script individual avulso
+    script_file = tmp_path / "scripts" / "backup.sh"
+    script_file.parent.mkdir()
+    script_file.write_text("#!/bin/bash\necho backup\n", encoding="utf-8")
+
+    db_path = tmp_path / "test_indiv.db"
+    db = Database(db_path)
+
+    config = AppConfig(
+        scan=ScanConfig(
+            roots=[roots_dir],
+            individual_projects=[indiv_proj, script_file],
+        ),
+        database=DatabaseConfig(path=db_path),
+    )
+
+    res = run_scan(config, db)
+    assert res.total_entities == 3
+    assert res.new_count == 3
+
+    with db.get_connection() as conn:
+        entity_repo = EntityRepository(conn)
+        entities = entity_repo.list_all()
+        assert len(entities) == 3
+        names = {e.name for e in entities}
+        assert "p1" in names
+        assert "standalone_project" in names
+        assert "backup" in names
+        types = {e.name: e.type for e in entities}
+        assert types["backup"] == "script"
+        assert types["standalone_project"] == "project"
+

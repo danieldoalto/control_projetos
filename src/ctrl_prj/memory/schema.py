@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS analyses (
     purpose TEXT,
     languages_json TEXT,
     technologies_json TEXT,
+    tags_json TEXT,
     confidence REAL DEFAULT 1.0,
     raw_response TEXT,
     entity_fingerprint TEXT NOT NULL,
@@ -100,7 +101,13 @@ def init_db(conn: sqlite3.Connection) -> None:
     """Inicializa o schema do banco de dados e registra a versão atual."""
     cursor = conn.cursor()
     cursor.executescript(CREATE_SCHEMA_SQL)
-    
+
+    # Migração suave de colunas para tabelas existentes
+    cursor.execute("PRAGMA table_info(analyses)")
+    columns = [col[1] for col in cursor.fetchall()]
+    if "tags_json" not in columns:
+        cursor.execute("ALTER TABLE analyses ADD COLUMN tags_json TEXT")
+
     # Verifica schema_version
     cursor.execute("SELECT MAX(version) FROM schema_version")
     row = cursor.fetchone()
@@ -112,6 +119,7 @@ def init_db(conn: sqlite3.Connection) -> None:
             (SCHEMA_VERSION,),
         )
     conn.commit()
+
 
 
 def get_schema_version(conn: sqlite3.Connection) -> Optional[int]:

@@ -1,5 +1,4 @@
-"""Motor de descoberta e exploração do filesystem para ctrl_prj."""
-
+import fnmatch
 from pathlib import Path
 from typing import List, Optional, Set
 
@@ -15,9 +14,10 @@ def _is_excluded(path: Path, exclusion_set: Set[str]) -> bool:
     if name in exclusion_set:
         return True
     for excl in exclusion_set:
-        if path.match(excl) or path.match(f"*/{excl}") or path.match(f"*/{excl}/*"):
+        if fnmatch.fnmatch(name, excl) or path.match(excl) or path.match(f"*/{excl}") or path.match(f"*/{excl}/*"):
             return True
     return False
+
 
 
 class ProjectExplorer:

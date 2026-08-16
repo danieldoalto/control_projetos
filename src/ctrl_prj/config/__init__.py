@@ -14,6 +14,7 @@ from ctrl_prj.config.settings import (
     ReporterConfig,
     ScanConfig,
     load_config,
+    load_dotenv,
 )
 
 __all__ = [
@@ -28,4 +29,6 @@ __all__ = [
     "ReporterConfig",
     "ScanConfig",
     "load_config",
+    "load_dotenv",
 ]
+

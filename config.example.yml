@@ -1,16 +1,23 @@
 # ==============================================================================
-# ctrl_prj - Exemplo de Arquivo de Configuração (config.yml)
+# ctrl_prj - Exemplo de Arquivo de Configuração (config.example.yml)
 # ==============================================================================
 
 # Configurações do Scanner e Descoberta de Projetos
 scan:
-  # Lista de diretórios raízes a serem inspecionados (o ~ é expandido para o home do usuário)
+  # Lista de diretórios raízes a serem inspecionados (contêm múltiplos projetos dentro)
   roots:
     - ~/projetos
     - ~/scripts
 
-  # Diretórios ou padrões que o scanner deve ignorar por padrão
+  # Pastas ou scripts de projetos individuais diretos (cada item é tratado como um projeto único)
+  individual_projects:
+    - ~/meu_projeto_avulso
+    - ~/scripts/meu_script.py
+
+
+  # Diretórios, pastas e arquivos que o scanner deve ignorar por padrão
   exclusions:
+    # Git, Ambientes e Caches de Build
     - .git
     - node_modules
     - .venv
@@ -21,6 +28,32 @@ scan:
     - build
     - coverage
     - .cache
+
+    # Ferramentas de IA e IDEs
+    - .claude
+    - .cursor
+    - .gemini
+    - graphify-out
+
+    # Caches de Testes e Linters
+    - .pytest_cache
+    - .mypy_cache
+    - .ruff_cache
+
+    # Segredos e Variáveis de Ambiente
+    - .env
+    - .env.*
+
+    # Arquivos de Lock de Dependências (pesados e desnecessários para entender o projeto)
+    - package-lock.json
+    - pnpm-lock.yaml
+    - yarn.lock
+    - uv.lock
+    - poetry.lock
+    - Cargo.lock
+
+    # Marcadores de pacote Python (para manter relatórios limpos)
+    - __init__.py
 
   # Extensões de arquivos de código reconhecidas para análise estrutural
   code_extensions:
@@ -87,3 +120,6 @@ llm:
 reporter:
   # Diretório onde os relatórios Markdown (INDEX.md e relatórios de projetos) serão gerados
   output_dir: reports
+  # Identificador deste computador/dispositivo (usado como prefixo nos arquivos de relatórios)
+  device: meu-computador
+

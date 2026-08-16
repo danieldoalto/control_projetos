@@ -1,6 +1,7 @@
 """Provedor de LLM compatível com a API padrão OpenAI (OpenAI, OpenRouter, Ollama, LM Studio)."""
 
 import os
+import time
 from typing import Any, Dict, List, Optional
 import httpx
 
@@ -12,6 +13,7 @@ from ctrl_prj.llm.exceptions import (
     LLMError,
     LLMResponseError,
 )
+
 
 DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
 DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
@@ -101,39 +103,56 @@ class OpenAIProvider(LLMProvider):
             "max_tokens": self.max_tokens,
         }
 
-        try:
-            with httpx.Client(timeout=self.timeout) as client:
-                response = client.post(endpoint, json=payload, headers=headers)
-        except (httpx.ConnectError, httpx.TimeoutException, httpx.NetworkError) as exc:
-            raise LLMConnectionError(
-                f"Falha de conexão com o provedor LLM ({self.base_url}): {exc}"
-            ) from exc
-        except Exception as exc:
-            raise LLMError(f"Erro inesperado na chamada ao provedor LLM: {exc}") from exc
+        for attempt in range(1, 3):
+            try:
+                with httpx.Client(timeout=self.timeout) as client:
+                    response = client.post(endpoint, json=payload, headers=headers)
+            except (httpx.ConnectError, httpx.TimeoutException, httpx.NetworkError) as exc:
+                if attempt < 2:
+                    time.sleep(1.5)
+                    continue
+                raise LLMConnectionError(
+                    f"Falha de conexão com o provedor LLM ({self.base_url}): {exc}"
+                ) from exc
+            except Exception as exc:
+                raise LLMError(f"Erro inesperado na chamada ao provedor LLM: {exc}") from exc
 
-        if response.status_code in {401, 403}:
-            raise LLMAuthenticationError(
-                f"Falha de autenticação no provedor LLM ({response.status_code}): {response.text}"
-            )
+            if response.status_code in {401, 403}:
+                raise LLMAuthenticationError(
+                    f"Falha de autenticação no provedor LLM ({response.status_code}): {response.text}"
+                )
 
-        if response.status_code != 200:
-            raise LLMResponseError(
-                f"Erro na resposta do provedor LLM (HTTP {response.status_code}): {response.text}"
-            )
+            if response.status_code != 200:
+                if attempt < 2 and response.status_code in {429, 500, 502, 503, 504}:
+                    time.sleep(2.0)
+                    continue
+                raise LLMResponseError(
+                    f"Erro na resposta do provedor LLM (HTTP {response.status_code}): {response.text}"
+                )
 
-        try:
-            data = response.json()
-            choices = data.get("choices", [])
-            if not choices:
-                raise LLMResponseError("O provedor LLM retornou uma lista vazia de escolhas ('choices').")
+            try:
+                data = response.json()
+                choices = data.get("choices", [])
+                if not choices:
+                    if attempt < 2:
+                        time.sleep(1.0)
+                        continue
+                    raise LLMResponseError("O provedor LLM retornou uma lista vazia de escolhas ('choices').")
 
-            message = choices[0].get("message", {})
-            content = message.get("content", "")
-            if not content:
-                raise LLMResponseError("O provedor LLM retornou um conteúdo vazio na mensagem.")
+                message = choices[0].get("message", {})
+                content = message.get("content") or ""
+                if not content and message.get("reasoning_content"):
+                    content = message.get("reasoning_content") or ""
 
-            return content.strip()
-        except LLMError:
-            raise
-        except Exception as exc:
-            raise LLMResponseError(f"Erro ao processar JSON da resposta do provedor LLM: {exc}") from exc
+                if not content:
+                    if attempt < 2:
+                        time.sleep(1.0)
+                        continue
+                    raise LLMResponseError("O provedor LLM retornou um conteúdo vazio na mensagem.")
+
+                return content.strip()
+            except LLMError:
+                raise
+            except Exception as exc:
+                raise LLMResponseError(f"Erro ao processar JSON da resposta do provedor LLM: {exc}") from exc
+

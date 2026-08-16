@@ -1,10 +1,15 @@
 """Modelos de dados para o módulo de fingerprinting."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
-from ctrl_prj.scanner.models import ScannedFile
+
+if TYPE_CHECKING:
+    from ctrl_prj.scanner.models import ScannedFile
+
 
 
 @dataclass(frozen=True)

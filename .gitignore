@@ -49,12 +49,21 @@ coverage.xml
 
 # Local runtime data & SQLite
 *.db
+*.db.*
 *.sqlite
 *.sqlite3
+*.bk
+*.bak
 .ctrl_prj/
+
 
 # Local configuration & Reports
 config.yml
 config.yaml
 !config.example.yml
+.env
+.env.*
+!.env.example
 reports/
+graphify-out/
+

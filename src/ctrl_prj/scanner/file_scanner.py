@@ -180,9 +180,10 @@ class FileScanner:
             if not self.follow_symlinks and entry.is_symlink():
                 continue
 
+            if self._is_path_excluded(entry):
+                continue
+
             if entry.is_dir():
-                if self._is_dir_excluded(entry):
-                    continue
                 self._scan_dir(
                     current_dir=entry,
                     entity_root=entity_root,
@@ -214,15 +215,16 @@ class FileScanner:
                     )
                 )
 
-    def _is_dir_excluded(self, dir_path: Path) -> bool:
-        """Verifica se um diretório está na lista de exclusões."""
-        name = dir_path.name
+    def _is_path_excluded(self, path: Path) -> bool:
+        """Verifica se um arquivo ou diretório está na lista de exclusões."""
+        name = path.name
         if name in self.exclusions:
             return True
         for excl in self.exclusions:
-            if dir_path.match(excl) or dir_path.match(f"*/{excl}"):
+            if fnmatch.fnmatch(name, excl) or path.match(excl) or path.match(f"*/{excl}"):
                 return True
         return False
+
 
 
 def scan_entity_files(

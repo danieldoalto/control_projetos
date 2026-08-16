@@ -56,10 +56,12 @@ class AnalysisRecord:
     purpose: Optional[str] = None
     languages_json: str = "[]"
     technologies_json: str = "[]"
+    tags_json: str = "[]"
     confidence: float = 1.0
     raw_response: Optional[str] = None
     entity_fingerprint: str = ""
     created_at: Optional[str] = None
+
 
 
 @dataclass

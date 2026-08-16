@@ -1,5 +1,4 @@
-"""Modelos de configuração e lógica de carregamento para ctrl_prj."""
-
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 import yaml
@@ -11,6 +10,34 @@ from ctrl_prj.config.exceptions import (
     ConfigParseError,
     ConfigValidationError,
 )
+
+
+def load_dotenv(dotenv_path: Optional[Union[str, Path]] = None) -> None:
+    """Carrega variáveis de ambiente de um arquivo .env se existir."""
+    if dotenv_path is None:
+        target = Path(".env")
+    else:
+        target = Path(dotenv_path)
+
+    if not target.is_file():
+        return
+
+    try:
+        content = target.read_text(encoding="utf-8")
+        for line in content.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, val = line.split("=", 1)
+            key = key.strip()
+            val = val.strip()
+            if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
+                val = val[1:-1]
+            if key and key not in os.environ:
+                os.environ[key] = val
+    except Exception:
+        pass
+
 
 DEFAULT_EXCLUSIONS: List[str] = [
     ".git",
@@ -54,19 +81,19 @@ DEFAULT_CONTEXT_FILES: List[str] = [
 ]
 
 
-def _expand_and_resolve_path(path_val: Union[str, Path]) -> Path:
-    """Expande ~ e resolve caminhos para paths absolutos."""
+def _expand_path(path_val: Union[str, Path]) -> Path:
+    """Expande ~ sem resolver caminhos relativos antecipadamente."""
     if isinstance(path_val, str):
         path_obj = Path(path_val.strip())
     else:
         path_obj = path_val
-    return path_obj.expanduser().resolve()
+    return path_obj.expanduser()
 
 
 class DatabaseConfig(BaseModel):
     """Configurações do banco de dados SQLite."""
     path: Path = Field(
-        default_factory=lambda: _expand_and_resolve_path("~/.ctrl_prj/data.db"),
+        default_factory=lambda: _expand_path("~/.ctrl_prj/data.db").resolve(),
         description="Caminho do arquivo SQLite",
     )
 
@@ -74,8 +101,8 @@ class DatabaseConfig(BaseModel):
     @classmethod
     def _validate_path(cls, v: Any) -> Path:
         if v is None:
-            return _expand_and_resolve_path("~/.ctrl_prj/data.db")
-        return _expand_and_resolve_path(v)
+            return _expand_path("~/.ctrl_prj/data.db")
+        return _expand_path(v)
 
 
 class ScanConfig(BaseModel):
@@ -83,6 +110,10 @@ class ScanConfig(BaseModel):
     roots: List[Path] = Field(
         default_factory=list,
         description="Lista de diretórios raízes a escanear",
+    )
+    individual_projects: List[Path] = Field(
+        default_factory=list,
+        description="Lista de caminhos de projetos ou scripts individuais diretos",
     )
     exclusions: List[str] = Field(
         default_factory=lambda: list(DEFAULT_EXCLUSIONS),
@@ -107,10 +138,22 @@ class ScanConfig(BaseModel):
         if v is None:
             return []
         if isinstance(v, (str, Path)):
-            return [_expand_and_resolve_path(v)]
+            return [_expand_path(v)]
         if isinstance(v, (list, tuple)):
-            return [_expand_and_resolve_path(item) for item in v]
+            return [_expand_path(item) for item in v]
         raise ValueError(f"Formato inválido para roots: {v}")
+
+    @field_validator("individual_projects", mode="before")
+    @classmethod
+    def _validate_individual_projects(cls, v: Any) -> List[Path]:
+        if v is None:
+            return []
+        if isinstance(v, (str, Path)):
+            return [_expand_path(v)]
+        if isinstance(v, (list, tuple)):
+            return [_expand_path(item) for item in v]
+        raise ValueError(f"Formato inválido para individual_projects: {v}")
+
 
 
 class FingerprintConfig(BaseModel):
@@ -152,19 +195,41 @@ class LLMConfig(BaseModel):
     )
 
 
+import socket
+
+
+def _default_device_name() -> str:
+    """Retorna o hostname da máquina atual ou 'local' como fallback."""
+    try:
+        return socket.gethostname() or "local"
+    except Exception:
+        return "local"
+
+
 class ReporterConfig(BaseModel):
     """Configurações de geração de relatórios."""
     output_dir: Path = Field(
-        default_factory=lambda: _expand_and_resolve_path("reports"),
+        default_factory=lambda: _expand_path("reports").resolve(),
         description="Diretório onde os relatórios Markdown serão gerados",
+    )
+    device: str = Field(
+        default_factory=_default_device_name,
+        description="Nome ou identificador do dispositivo/computador",
     )
 
     @field_validator("output_dir", mode="before")
     @classmethod
     def _validate_output_dir(cls, v: Any) -> Path:
         if v is None:
-            return _expand_and_resolve_path("reports")
-        return _expand_and_resolve_path(v)
+            return _expand_path("reports")
+        return _expand_path(v)
+
+    @field_validator("device", mode="before")
+    @classmethod
+    def _validate_device(cls, v: Any) -> str:
+        if v is None or not str(v).strip():
+            return _default_device_name()
+        return str(v).strip()
 
 
 class AppConfig(BaseModel):
@@ -191,6 +256,10 @@ class AppConfig(BaseModel):
 
         if "roots" in normalized:
             scan_dict["roots"] = normalized.pop("roots")
+        if "individual_projects" in normalized:
+            scan_dict["individual_projects"] = normalized.pop("individual_projects")
+        elif "projects" in normalized:
+            scan_dict["individual_projects"] = normalized.pop("projects")
         if "exclusions" in normalized:
             scan_dict["exclusions"] = normalized.pop("exclusions")
         if "code_extensions" in normalized:
@@ -207,9 +276,20 @@ class AppConfig(BaseModel):
         if "database" in normalized and isinstance(normalized["database"], (str, Path)):
             normalized["database"] = {"path": normalized["database"]}
 
-        # Normaliza reporter se informado como string/Path no topo
-        if "reporter" in normalized and isinstance(normalized["reporter"], (str, Path)):
-            normalized["reporter"] = {"output_dir": normalized["reporter"]}
+        # Normaliza reporter e device se informados no topo
+        reporter_dict = normalized.get("reporter")
+        if not isinstance(reporter_dict, dict):
+            if isinstance(reporter_dict, (str, Path)):
+                reporter_dict = {"output_dir": reporter_dict}
+            else:
+                reporter_dict = {}
+
+        for dev_key in ("device", "dispositivo", "Dispositivo", "device_name"):
+            if dev_key in normalized:
+                reporter_dict["device"] = normalized.pop(dev_key)
+
+        if reporter_dict:
+            normalized["reporter"] = reporter_dict
 
         return normalized
 
@@ -217,6 +297,17 @@ class AppConfig(BaseModel):
     def roots(self) -> List[Path]:
         """Atalho de conveniência para scan.roots."""
         return self.scan.roots
+
+    @property
+    def individual_projects(self) -> List[Path]:
+        """Atalho de conveniência para scan.individual_projects."""
+        return self.scan.individual_projects
+
+    @property
+    def device(self) -> str:
+        """Atalho de conveniência para reporter.device."""
+        return self.reporter.device
+
 
     @property
     def exclusions(self) -> List[str]:
@@ -245,21 +336,38 @@ def load_config(path: Optional[Union[str, Path]] = None) -> AppConfig:
         ConfigParseError: Se o arquivo YAML tiver sintaxe inválida.
         ConfigValidationError: Se o conteúdo não atender aos requisitos de tipos.
     """
-    if path is None:
-        default_file = Path("config.yml")
-        if not default_file.exists():
-            default_file = Path("config.yaml")
+    # Carrega variáveis de ambiente do .env se existir
+    load_dotenv()
 
-        if not default_file.exists():
+    if path is None:
+        found_config: Optional[Path] = None
+        current = Path.cwd().resolve()
+        for candidate_dir in [current, *current.parents]:
+            for name in ("config.yml", "config.yaml"):
+                candidate = candidate_dir / name
+                if candidate.is_file():
+                    found_config = candidate
+                    break
+            if found_config or (candidate_dir / ".git").exists():
+                break
+
+        if not found_config:
             # Retorna configuração padrão válida
             return AppConfig()
-        config_path = default_file
+        config_path = found_config
+        if (config_path.parent / ".env").is_file():
+            load_dotenv(config_path.parent / ".env")
     else:
         config_path = Path(path)
         if not config_path.exists():
             raise ConfigNotFoundError(
                 f"Arquivo de configuração não encontrado: '{config_path}'"
             )
+        # Tenta carregar .env da mesma pasta do arquivo de config se existir
+        if (config_path.parent / ".env").is_file():
+            load_dotenv(config_path.parent / ".env")
+
+
 
     try:
         content = config_path.read_text(encoding="utf-8")
@@ -282,8 +390,33 @@ def load_config(path: Optional[Union[str, Path]] = None) -> AppConfig:
         )
 
     try:
-        return AppConfig.model_validate(raw_data)
+        cfg = AppConfig.model_validate(raw_data)
+        base_dir = config_path.parent
+        # Ancorar caminhos relativos ao diretório do arquivo de configuração
+        if not cfg.database.path.is_absolute():
+            cfg.database.path = (base_dir / cfg.database.path).resolve()
+        if not cfg.reporter.output_dir.is_absolute():
+            cfg.reporter.output_dir = (base_dir / cfg.reporter.output_dir).resolve()
+        resolved_roots = []
+        for r in cfg.scan.roots:
+            if not r.is_absolute():
+                resolved_roots.append((base_dir / r).resolve())
+            else:
+                resolved_roots.append(r)
+        cfg.scan.roots = resolved_roots
+
+        resolved_individuals = []
+        for p in cfg.scan.individual_projects:
+            if not p.is_absolute():
+                resolved_individuals.append((base_dir / p).resolve())
+            else:
+                resolved_individuals.append(p)
+        cfg.scan.individual_projects = resolved_individuals
+
+        return cfg
     except Exception as exc:
+
         raise ConfigValidationError(
             f"Falha na validação das configurações em '{config_path}': {exc}"
         ) from exc
+

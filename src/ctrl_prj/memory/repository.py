@@ -430,10 +430,10 @@ class AnalysisRepository:
             """
             INSERT INTO analyses (
                 entity_id, name, type, description, purpose,
-                languages_json, technologies_json, confidence,
+                languages_json, technologies_json, tags_json, confidence,
                 raw_response, entity_fingerprint
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 analysis.entity_id,
@@ -443,6 +443,7 @@ class AnalysisRepository:
                 analysis.purpose,
                 analysis.languages_json,
                 analysis.technologies_json,
+                analysis.tags_json,
                 analysis.confidence,
                 analysis.raw_response,
                 analysis.entity_fingerprint,
@@ -458,7 +459,7 @@ class AnalysisRepository:
         cursor.execute(
             """
             SELECT id, entity_id, name, type, description, purpose,
-                   languages_json, technologies_json, confidence,
+                   languages_json, technologies_json, tags_json, confidence,
                    raw_response, entity_fingerprint, created_at
             FROM analyses WHERE id = ?
             """,
@@ -476,6 +477,7 @@ class AnalysisRepository:
             purpose=row["purpose"],
             languages_json=row["languages_json"],
             technologies_json=row["technologies_json"],
+            tags_json=row["tags_json"] if "tags_json" in row.keys() and row["tags_json"] else "[]",
             confidence=row["confidence"],
             raw_response=row["raw_response"],
             entity_fingerprint=row["entity_fingerprint"],
@@ -488,7 +490,7 @@ class AnalysisRepository:
         cursor.execute(
             """
             SELECT id, entity_id, name, type, description, purpose,
-                   languages_json, technologies_json, confidence,
+                   languages_json, technologies_json, tags_json, confidence,
                    raw_response, entity_fingerprint, created_at
             FROM analyses WHERE entity_id = ?
             ORDER BY id DESC LIMIT 1
@@ -507,6 +509,7 @@ class AnalysisRepository:
             purpose=row["purpose"],
             languages_json=row["languages_json"],
             technologies_json=row["technologies_json"],
+            tags_json=row["tags_json"] if "tags_json" in row.keys() and row["tags_json"] else "[]",
             confidence=row["confidence"],
             raw_response=row["raw_response"],
             entity_fingerprint=row["entity_fingerprint"],
@@ -519,7 +522,7 @@ class AnalysisRepository:
         cursor.execute(
             """
             SELECT id, entity_id, name, type, description, purpose,
-                   languages_json, technologies_json, confidence,
+                   languages_json, technologies_json, tags_json, confidence,
                    raw_response, entity_fingerprint, created_at
             FROM analyses WHERE entity_id = ?
             ORDER BY id DESC
@@ -536,6 +539,7 @@ class AnalysisRepository:
                 purpose=row["purpose"],
                 languages_json=row["languages_json"],
                 technologies_json=row["technologies_json"],
+                tags_json=row["tags_json"] if "tags_json" in row.keys() and row["tags_json"] else "[]",
                 confidence=row["confidence"],
                 raw_response=row["raw_response"],
                 entity_fingerprint=row["entity_fingerprint"],
@@ -543,6 +547,7 @@ class AnalysisRepository:
             )
             for row in cursor.fetchall()
         ]
+
 
 
 class HistoryRepository:

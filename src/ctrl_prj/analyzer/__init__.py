@@ -5,6 +5,12 @@ from ctrl_prj.analyzer.context_builder import (
     build_context,
 )
 from ctrl_prj.analyzer.models import FileStructure, LLMContext
+from ctrl_prj.analyzer.orchestrator import (
+    AnalyzeResult,
+    EntityAnalysisSummary,
+    ProgressCallback,
+    run_analyze,
+)
 from ctrl_prj.analyzer.structural import analyze_file
 
 __all__ = [
@@ -13,4 +19,9 @@ __all__ = [
     "DEFAULT_MAX_CHARS_PER_CONTEXT_FILE",
     "analyze_file",
     "build_context",
+    "run_analyze",
+    "AnalyzeResult",
+    "EntityAnalysisSummary",
+    "ProgressCallback",
 ]
+

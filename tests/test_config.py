@@ -138,3 +138,66 @@ def test_example_config_file_validity():
     assert isinstance(cfg, AppConfig)
     assert len(cfg.roots) == 2
     assert cfg.llm.provider == "openai"
+
+
+def test_load_dotenv_integration(tmp_path, monkeypatch):
+    """Verifica se variáveis do arquivo .env são lidas e inseridas no os.environ."""
+    monkeypatch.chdir(tmp_path)
+    dotenv_file = tmp_path / ".env"
+    dotenv_file.write_text(
+        """
+# Comentário
+OPENROUTER_API_KEY="sk-or-v1-test-secret-token"
+OUTRA_VARIAVEL=valor_sem_aspas
+""",
+        encoding="utf-8",
+    )
+
+    import os
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.delenv("OUTRA_VARIAVEL", raising=False)
+
+    load_config(None)
+
+    assert os.getenv("OPENROUTER_API_KEY") == "sk-or-v1-test-secret-token"
+    assert os.getenv("OUTRA_VARIAVEL") == "valor_sem_aspas"
+
+
+def test_load_individual_projects_config(tmp_path):
+    """Verifica se individual_projects é carregado e tem seus caminhos resolvidos."""
+    config_file = tmp_path / "indiv_config.yml"
+    config_file.write_text(
+        """
+scan:
+  roots:
+    - /tmp/raiz1
+  individual_projects:
+    - /tmp/projeto_avulso
+    - ./relativo_indiv
+""",
+        encoding="utf-8",
+    )
+    cfg = load_config(config_file)
+    assert len(cfg.roots) == 1
+    assert len(cfg.individual_projects) == 2
+    assert cfg.individual_projects[0] == Path("/tmp/projeto_avulso").resolve()
+    assert cfg.individual_projects[1] == (tmp_path / "relativo_indiv").resolve()
+
+
+def test_load_device_config(tmp_path):
+    """Verifica carregamento de device/dispositivo no topo e em reporter."""
+    # 1. No nível superior
+    c1 = tmp_path / "c1.yml"
+    c1.write_text("device: meu-note\n", encoding="utf-8")
+    cfg1 = load_config(c1)
+    assert cfg1.reporter.device == "meu-note"
+    assert cfg1.device == "meu-note"
+
+    # 2. Sob a seção reporter
+    c2 = tmp_path / "c2.yml"
+    c2.write_text("reporter:\n  device: meu-pc-gamer\n", encoding="utf-8")
+    cfg2 = load_config(c2)
+    assert cfg2.device == "meu-pc-gamer"
+
+
+
