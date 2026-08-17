@@ -16,6 +16,7 @@ from ctrl_prj.fingerprint.delta import FileDelta, compute_file_delta
 from ctrl_prj.fingerprint.hasher import hash_scanned_files
 from ctrl_prj.fingerprint.models import HashedFile
 
+from ctrl_prj.log import get_logger
 from ctrl_prj.memory import (
     Database,
     EntityRecord,
@@ -28,6 +29,8 @@ from ctrl_prj.memory import (
     RootRepository,
 )
 from ctrl_prj.scanner.file_scanner import scan_entity_files
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -107,6 +110,7 @@ def _process_entity(
     now_ts = _current_timestamp_iso()
 
     if macro_status == MacroStatus.NEW:
+        logger.info(f"Nova entidade detectada: {entity.name} ({entity.type}) com {len(hashed_files)} arquivos em {entity_path_str}")
         result.new_count += 1
         saved_entity = entity_repo.upsert(
             EntityRecord(
@@ -159,6 +163,7 @@ def _process_entity(
         )
 
     elif macro_status == MacroStatus.CHANGED:
+        logger.info(f"Entidade modificada: {entity.name} ({entity.type}) em {entity_path_str}")
         result.changed_count += 1
         saved_entity = entity_repo.get_by_path(entity_path_str)
         prev_fp = saved_entity.fingerprint if saved_entity else None
@@ -223,6 +228,7 @@ def _process_entity(
         )
 
     else:  # UNCHANGED
+        logger.debug(f"Entidade inalterada: {entity.name} ({entity.type})")
         result.unchanged_count += 1
         saved_entity = entity_repo.get_by_path(entity_path_str)
         if saved_entity and saved_entity.id:
@@ -281,7 +287,10 @@ def run_scan(config: AppConfig, db: Database, force: bool = False) -> ScanResult
     individual_projects = config.individual_projects
 
     if not roots and not individual_projects:
+        logger.warning("Nenhuma raiz ou projeto individual configurado para scan.")
         return result
+
+    logger.info(f"Iniciando varredura do filesystem: {len(roots)} raízes, {len(individual_projects)} projetos individuais (force={force})")
 
     algorithm = config.fingerprint.algorithm
     exclusions = config.exclusions
@@ -299,10 +308,12 @@ def run_scan(config: AppConfig, db: Database, force: bool = False) -> ScanResult
         for root_path in roots:
             resolved_root = Path(root_path).expanduser().resolve()
             if not resolved_root.exists() or not resolved_root.is_dir():
+                logger.warning(f"Raiz não encontrada ou inacessível: {resolved_root}")
                 continue
 
             result.roots_scanned += 1
             root_rec = root_repo.get_or_create(str(resolved_root))
+            logger.debug(f"Escaneando raiz: {resolved_root}")
 
             # Descoberta de entidades na raiz
             discovered_entities: List[DiscoveredEntity] = discover_entities(
@@ -339,6 +350,7 @@ def run_scan(config: AppConfig, db: Database, force: bool = False) -> ScanResult
             for db_ent in db_entities_for_root:
                 if db_ent.path not in discovered_paths_in_root and db_ent.status != "missing":
                     result.missing_count += 1
+                    logger.warning(f"Entidade não encontrada no filesystem (missing): {db_ent.name} ({db_ent.path})")
                     entity_repo.update_status(db_ent.id, "missing")  # type: ignore
 
                     history_repo.create(
@@ -372,6 +384,7 @@ def run_scan(config: AppConfig, db: Database, force: bool = False) -> ScanResult
                 existing = entity_repo.get_by_path(str(resolved_indiv))
                 if existing and existing.id and existing.status != "missing":
                     result.missing_count += 1
+                    logger.warning(f"Projeto individual não encontrado (missing): {existing.name} ({resolved_indiv})")
                     entity_repo.update_status(existing.id, "missing")
                     history_repo.create(
                         HistoryRecord(
@@ -426,5 +439,10 @@ def run_scan(config: AppConfig, db: Database, force: bool = False) -> ScanResult
                 result=result,
             )
 
+    logger.info(
+        f"Varredura concluída: {result.roots_scanned} raízes processadas, "
+        f"{result.total_entities} entidades ({result.new_count} novas, {result.changed_count} modificadas, "
+        f"{result.unchanged_count} inalteradas, {result.missing_count} ausentes), {result.total_files} arquivos catalogados."
+    )
     return result
 

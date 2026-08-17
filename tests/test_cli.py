@@ -84,3 +84,28 @@ def test_cli_force_flags(mock_cli_config, capsys):
     captured = capsys.readouterr()
     assert "FASE 1/3: SCAN" in captured.out
 
+
+def test_cli_log_flags(mock_cli_config, tmp_path):
+    """Verifica se as flags globais --log-level e --log-dest são aceitas e executadas."""
+    log_file = tmp_path / "cli_test_exec.log"
+    exit_code = main([
+        "-c", mock_cli_config,
+        "--log-level", "DEBUG",
+        "--log-dest", "file",
+        "scan",
+    ])
+    assert exit_code == 0
+
+
+
+def test_cli_llm_traffic_flag(mock_cli_config):
+    """Verifica se a flag global --llm-traffic é aceita e repassada à configuração."""
+    exit_code = main([
+        "-c", mock_cli_config,
+        "--llm-traffic", "full",
+        "scan",
+    ])
+    assert exit_code == 0
+
+
+

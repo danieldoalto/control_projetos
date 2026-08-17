@@ -8,6 +8,7 @@ import re
 from typing import Dict, List, Optional, Set, Tuple
 
 from ctrl_prj.config.settings import AppConfig
+from ctrl_prj.log import get_logger
 from ctrl_prj.memory import (
     AnalysisRecord,
     AnalysisRepository,
@@ -19,6 +20,8 @@ from ctrl_prj.memory import (
     RootRecord,
     RootRepository,
 )
+
+logger = get_logger(__name__)
 
 
 
@@ -468,6 +471,7 @@ def generate_reports(
     """
     target_dir = output_dir or config.reporter.output_dir
     target_dir = Path(target_dir).expanduser().resolve()
+    logger.info(f"Iniciando geração de relatórios Markdown em: {target_dir}")
 
     projects_dir = target_dir / "projects"
     projects_dir.mkdir(parents=True, exist_ok=True)
@@ -491,6 +495,7 @@ def generate_reports(
         result.total_entities = len(entities)
 
         if not entities:
+            logger.info("Nenhuma entidade encontrada no banco para geração de relatórios.")
             # Gera índice vazio
             index_path = target_dir / index_filename
             index_content = generate_index(
@@ -531,6 +536,7 @@ def generate_reports(
             report_md = generate_entity_report(entity, latest_analysis, files)
             file_path = projects_dir / candidate_filename
             file_path.write_text(report_md, encoding="utf-8")
+            logger.debug(f"Relatório gerado: {file_path.name} ({len(files)} arquivos)")
 
             result.generated_files.append(file_path)
             result.total_reports += 1
@@ -553,6 +559,10 @@ def generate_reports(
         result.index_path = index_path
         result.generated_files.append(index_path)
 
+    logger.info(
+        f"Geração de relatórios concluída: {result.total_reports} relatórios individuais em 'projects/' "
+        f"e índice consolidado em '{result.index_path}'"
+    )
     return result
 
 

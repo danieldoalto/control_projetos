@@ -150,3 +150,51 @@ def test_openai_provider_http_errors():
         with pytest.raises(LLMResponseError) as exc_info:
             provider.generate_response("prompt")
         assert "500" in str(exc_info.value)
+
+
+def test_openai_provider_traffic_log_basic(caplog):
+    """Testa emissão de logs de tráfego em nível basic."""
+    import logging
+    provider = OpenAIProvider(
+        api_key="sk-test",
+        traffic_log="basic",
+    )
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "choices": [{"message": {"content": "Resposta simples"}}]
+    }
+
+    with caplog.at_level(logging.INFO):
+        with patch("httpx.Client.post", return_value=mock_resp):
+            res = provider.generate_response("Pergunta basica")
+            assert res == "Resposta simples"
+
+    assert any("[LLM TRAFFIC REQUEST]" in r.message for r in caplog.records)
+    assert any("[LLM TRAFFIC RESPONSE]" in r.message for r in caplog.records)
+    assert not any("[LLM TRAFFIC FULL PROMPT]" in r.message for r in caplog.records)
+
+
+def test_openai_provider_traffic_log_full(caplog):
+    """Testa emissão de logs de tráfego em nível full."""
+    import logging
+    provider = OpenAIProvider(
+        api_key="sk-test",
+        traffic_log="full",
+    )
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "choices": [{"message": {"content": "Resposta completa detalhada"}}]
+    }
+
+    with caplog.at_level(logging.INFO):
+        with patch("httpx.Client.post", return_value=mock_resp):
+            res = provider.generate_response("Pergunta completa", system_prompt="Prompt do sistema")
+            assert res == "Resposta completa detalhada"
+
+    assert any("[LLM TRAFFIC REQUEST]" in r.message for r in caplog.records)
+    assert any("[LLM TRAFFIC RESPONSE]" in r.message for r in caplog.records)
+    assert any("[LLM TRAFFIC FULL PROMPT]" in r.message for r in caplog.records)
+    assert any("[LLM TRAFFIC FULL RESPONSE]" in r.message for r in caplog.records)
+

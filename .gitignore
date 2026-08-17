@@ -66,4 +66,5 @@ config.yaml
 !.env.example
 reports/
 graphify-out/
+logs/
 

@@ -7,9 +7,12 @@ from typing import List, Optional
 
 from ctrl_prj.analyzer import run_analyze
 from ctrl_prj.config import ConfigError, load_config
+from ctrl_prj.log import get_logger, setup_logging
 from ctrl_prj.memory import Database
 from ctrl_prj.reporter import generate_reports
 from ctrl_prj.scanner import ScanResult, run_scan
+
+logger = get_logger(__name__)
 
 
 
@@ -23,12 +26,13 @@ def cmd_scan(args: argparse.Namespace) -> int:
     if not config.roots and not config.individual_projects:
         print("Nenhuma raiz ('roots') ou projeto individual ('individual_projects') configurado para escanear.")
         print("Adicione raízes ou projetos no seu arquivo config.yml.")
+        logger.warning("Comando scan abortado: nenhuma raiz ou projeto configurado.")
         return 0
-
 
     db = Database(config.database.path)
     print("🔍 Iniciando varredura do filesystem...")
     force = getattr(args, "force", False)
+    logger.info(f"Executando comando scan (force={force})...")
     result: ScanResult = run_scan(config, db, force=force)
 
     print(f"📁 Raízes processadas: {result.roots_scanned}")
@@ -51,6 +55,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
                 print(f"  [-] Entidade não encontrada (missing): {ent.name}")
 
     print("✅ Varredura concluída com sucesso.")
+    logger.info("Comando scan finalizado com sucesso.")
     return 0
 
 
@@ -62,6 +67,7 @@ def cmd_analyze(args: argparse.Namespace) -> int:
 
     db = Database(config.database.path)
     force = getattr(args, "force", False)
+    logger.info(f"Executando comando analyze (force={force})...")
     if force:
         print("🔍 Buscando TODAS as entidades para análise forçada (--force)...")
     else:
@@ -80,6 +86,7 @@ def cmd_analyze(args: argparse.Namespace) -> int:
         print("ℹ️  Nenhuma entidade pendente de análise (todas já analisadas ou inalteradas).")
         if result.already_analyzed_count > 0:
             print(f"   ({result.already_analyzed_count} entidades já estavam atualizadas no banco de dados).")
+        logger.info("Comando analyze finalizado: nenhuma entidade pendente.")
         return 0
 
     print("\n📊 Resumo da Análise:")
@@ -89,10 +96,13 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     if result.already_analyzed_count > 0:
         print(f"   ✔️  Já atualizadas anteriormente: {result.already_analyzed_count}")
 
+    logger.info(
+        f"Comando analyze finalizado: {result.analyzed_count} analisadas, "
+        f"{result.error_count} erros, {result.already_analyzed_count} inalteradas."
+    )
     if result.error_count > 0 and result.analyzed_count == 0:
         return 1
     return 0
-
 
 
 def cmd_report(args: argparse.Namespace) -> int:
@@ -104,6 +114,7 @@ def cmd_report(args: argparse.Namespace) -> int:
     db = Database(config.database.path)
     output_dir = Path(getattr(args, "output", None) or config.reporter.output_dir).expanduser().resolve()
 
+    logger.info(f"Executando comando report (output_dir={output_dir})...")
     print(f"📊 Gerando relatórios Markdown em '{output_dir}'...")
     result = generate_reports(config, db, output_dir=output_dir)
 
@@ -112,16 +123,19 @@ def cmd_report(args: argparse.Namespace) -> int:
     print(f"📄 Relatórios individuais criados: {result.total_reports} em 'projects/'")
     print(f"📚 Índice consolidado: '{result.index_path}'")
     print("✅ Geração de relatórios concluída com sucesso.")
+    logger.info(f"Comando report finalizado: {result.total_reports} relatórios gerados.")
     return 0
 
 
 def cmd_run(args: argparse.Namespace) -> int:
     """Executa o pipeline completo: scan -> analyze -> report."""
+    logger.info("Iniciando pipeline unificado: RUN (scan -> analyze -> report)...")
     print("=" * 60)
     print("🔍 FASE 1/3: SCAN (Varredura e Descoberta no Filesystem)")
     print("=" * 60)
     res_scan = cmd_scan(args)
     if res_scan != 0:
+        logger.error("Pipeline interrompido devido a erro na fase de SCAN.")
         print("\n❌ Pipeline interrompido devido a erro crítico na fase de SCAN.")
         return res_scan
 
@@ -129,7 +143,6 @@ def cmd_run(args: argparse.Namespace) -> int:
     print("🧠 FASE 2/3: ANALYZE (Interpretação Semântica com LLM)")
     print("=" * 60)
     cmd_analyze(args)
-    # Prossegue para o report para consolidar entidades analisadas e já existentes
 
     print("\n" + "=" * 60)
     print("📊 FASE 3/3: REPORT (Geração de Relatórios Markdown)")
@@ -139,6 +152,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     print("\n" + "=" * 60)
     print("🎉 Pipeline unificado (scan -> analyze -> report) finalizado!")
     print("=" * 60)
+    logger.info("Pipeline unificado RUN finalizado com sucesso.")
     return res_report
 
 
@@ -153,6 +167,24 @@ def build_parser() -> argparse.ArgumentParser:
         "--config",
         default=None,
         help="Caminho do arquivo de configuração (padrão: config.yml)",
+    )
+    parser.add_argument(
+        "--log-level",
+        default=None,
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "debug", "info", "warning", "error"],
+        help="Nível de log para a execução (DEBUG, INFO, WARNING, ERROR)",
+    )
+    parser.add_argument(
+        "--log-dest",
+        default=None,
+        choices=["console", "file", "both", "none", "CONSOLE", "FILE", "BOTH", "NONE", "off", "OFF"],
+        help="Destino dos logs (console, file, both, none)",
+    )
+    parser.add_argument(
+        "--llm-traffic",
+        default=None,
+        choices=["none", "basic", "full", "nenhum", "basico", "básico", "completo"],
+        help="Nível de log do tráfego LLM (none, basic, full)",
     )
 
     subparsers = parser.add_subparsers(
@@ -234,7 +266,14 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     try:
         config = load_config(args.config)
+        if args.llm_traffic:
+            config.llm.traffic_log = args.llm_traffic
         args.app_config = config
+        setup_logging(
+            config=config.logging,
+            cli_level=args.log_level,
+            cli_destination=args.log_dest,
+        )
     except ConfigError as exc:
         print(f"Erro de configuração: {exc}", file=sys.stderr)
         return 1

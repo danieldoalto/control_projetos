@@ -116,10 +116,45 @@ llm:
   # URL base (obrigatória/útil para provedores locais como Ollama, LM Studio ou endpoints personalizados)
   # base_url: http://localhost:11434/v1
 
+  # Nível de log do tráfego e requisições HTTP da LLM:
+  # - none (ou 'nenhum'): desabilita log de tráfego (padrão)
+  # - basic (ou 'basico'): registra metadados (modelo, endpoint, tamanho prompt, latência, status, tamanho resposta)
+  # - full (ou 'completo'): registra metadados + conteúdo completo dos prompts e respostas brutas
+  traffic_log: none
+
+
 # Configurações de Geração de Relatórios
 reporter:
   # Diretório onde os relatórios Markdown (INDEX.md e relatórios de projetos) serão gerados
   output_dir: reports
   # Identificador deste computador/dispositivo (usado como prefixo nos arquivos de relatórios)
   device: meu-computador
+
+# Configurações do Subsistema de Logs
+logging:
+  # Nível de detalhamento: DEBUG, INFO, WARNING, ERROR
+  level: INFO
+
+  # Destino das saídas de log:
+  # - console: somente no terminal (stdout)
+  # - file: somente no arquivo de log especificado em file_path
+  # - both: console e arquivo simultaneamente
+  # - none: desabilita logs completamente
+  destination: console
+
+  # Caminho do arquivo de log quando destination for 'file' ou 'both'
+  file_path: logs/ctrl_prj.log
+
+  # Rotação de logs baseada em tamanho máximo (em Megabytes)
+  max_size_mb: 10.0
+
+  # Quantidade de versões históricas de backup a manter
+  max_backups: 5
+
+  # Compactar backups rotacionados em formato gzip (.gz)
+  compress: true
+
+  # Formato legível padrão das mensagens de log
+  format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+
 

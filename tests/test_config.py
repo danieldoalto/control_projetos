@@ -200,4 +200,51 @@ def test_load_device_config(tmp_path):
     assert cfg2.device == "meu-pc-gamer"
 
 
+def test_load_logging_config(tmp_path):
+    """Verifica carregamento e ancoragem relativa da seção logging."""
+    cfg_file = tmp_path / "logging_config.yml"
+    cfg_file.write_text(
+        """
+logging:
+  level: DEBUG
+  destination: both
+  file_path: custom_logs/app.log
+  max_size_mb: 5.5
+  max_backups: 3
+  compress: false
+""",
+        encoding="utf-8",
+    )
+    cfg = load_config(cfg_file)
+    assert cfg.logging.level == "DEBUG"
+    assert cfg.log_level == "DEBUG"
+    assert cfg.logging.destination == "both"
+    assert cfg.log_destination == "both"
+    assert cfg.logging.file_path == (tmp_path / "custom_logs" / "app.log").resolve()
+    assert cfg.logging.max_size_mb == 5.5
+    assert cfg.logging.max_backups == 3
+    assert cfg.logging.compress is False
+
+
+def test_load_traffic_log_config(tmp_path):
+    """Verifica carregamento e aliases do nível de log de tráfego LLM."""
+    from ctrl_prj.config.settings import LLMConfig
+    import pytest
+    from pydantic import ValidationError
+
+    cfg1 = LLMConfig(traffic_log="completo")
+    assert cfg1.traffic_log == "full"
+
+    cfg2 = LLMConfig(traffic_log="basico")
+    assert cfg2.traffic_log == "basic"
+
+    cfg3 = LLMConfig(traffic_log="nenhum")
+    assert cfg3.traffic_log == "none"
+
+    with pytest.raises(ValidationError):
+        LLMConfig(traffic_log="invalido_123")
+
+
+
+
 

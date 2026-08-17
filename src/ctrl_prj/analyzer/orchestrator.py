@@ -11,6 +11,7 @@ from ctrl_prj.llm.base import LLMProvider
 from ctrl_prj.llm.contract import execute_analysis
 from ctrl_prj.llm.factory import get_provider
 from ctrl_prj.llm.schema import AnalysisResult
+from ctrl_prj.log import get_logger
 from ctrl_prj.memory import (
     AnalysisRecord,
     AnalysisRepository,
@@ -20,7 +21,7 @@ from ctrl_prj.memory import (
     FileRepository,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -91,19 +92,21 @@ def run_analyze(
 
         
         result.already_analyzed_count = len(all_entities) - len(pending_entities)
-
         result.total_pending = len(pending_entities)
 
         if not pending_entities:
+            logger.info(f"Nenhuma entidade pendente de análise ({result.already_analyzed_count} já atualizadas no banco).")
             return result
 
         total = len(pending_entities)
+        logger.info(f"Iniciando análise de {total} entidades pendentes ({result.already_analyzed_count} já analisadas, force={force})...")
 
         for index, entity in enumerate(pending_entities, start=1):
             entity_id = entity.id
             if entity_id is None:
                 continue
 
+            logger.info(f"[{index}/{total}] Analisando entidade '{entity.name}' ({entity.type}) em {entity.path}...")
             try:
                 # 1. Recupera arquivos associados e análise anterior (se houver)
                 files = file_repo.list_by_entity(entity_id)
@@ -115,6 +118,7 @@ def run_analyze(
                     files=files,
                     previous_analysis=previous_analysis,
                 )
+                logger.debug(f"Contexto construído para '{entity.name}': {len(files)} arquivos, tamanho prompt ~{len(str(context))} chars")
 
                 # 3. Executa a interpretação pelo LLM com validação de contrato
                 analysis_result: AnalysisResult = execute_analysis(
@@ -138,7 +142,6 @@ def run_analyze(
                 )
                 analysis_repo.create(analysis_rec)
 
-
                 # 5. Atualiza o status da entidade para 'analyzed'
                 entity_repo.update_status(entity_id, "analyzed")
 
@@ -153,6 +156,7 @@ def run_analyze(
                 )
                 result.summaries.append(summary)
                 result.analyzed_count += 1
+                logger.info(f"[{index}/{total}] ✨ Análise concluída: '{entity.name}' -> tipo={analysis_result.type}, conf={analysis_result.confidence}")
 
                 if on_progress:
                     on_progress(index, total, entity, analysis_result, None)
@@ -179,4 +183,8 @@ def run_analyze(
                 if on_progress:
                     on_progress(index, total, entity, None, str(exc))
 
+    logger.info(
+        f"Análise semântica finalizada: {result.analyzed_count} analisadas com sucesso, "
+        f"{result.error_count} erros, {result.already_analyzed_count} inalteradas."
+    )
     return result

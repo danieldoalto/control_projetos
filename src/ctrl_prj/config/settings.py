@@ -50,6 +50,8 @@ DEFAULT_EXCLUSIONS: List[str] = [
     "build",
     "coverage",
     ".cache",
+    "graphify-out",
+    "logs",
 ]
 
 DEFAULT_CODE_EXTENSIONS: List[str] = [
@@ -193,6 +195,29 @@ class LLMConfig(BaseModel):
         default=None,
         description="URL base para APIs customizadas ou locais (Ollama, LM Studio)",
     )
+    traffic_log: str = Field(
+        default="none",
+        description="Nível de log de tráfego LLM (none, basic, full)",
+    )
+
+    @field_validator("traffic_log", mode="before")
+    @classmethod
+    def _validate_traffic_log(cls, v: Any) -> str:
+        if v is None:
+            return "none"
+        if isinstance(v, bool):
+            return "basic" if v else "none"
+        s = str(v).strip().lower()
+        if s in {"none", "nenhum", "sem_log", "off", "false", "0", ""}:
+            return "none"
+        if s in {"basic", "basico", "básico", "simple", "simples"}:
+            return "basic"
+        if s in {"full", "completo", "all", "tudo", "verbose"}:
+            return "full"
+        raise ValueError(
+            f"Nível de log de tráfego LLM inválido '{v}'. Valores permitidos: none (nenhum), basic (básico), full (completo)."
+        )
+
 
 
 import socket
@@ -232,6 +257,76 @@ class ReporterConfig(BaseModel):
         return str(v).strip()
 
 
+
+class LoggingConfig(BaseModel):
+    """Configurações do subsistema de logs."""
+    level: str = Field(
+        default="INFO",
+        description="Nível de log (DEBUG, INFO, WARNING, ERROR)",
+    )
+    destination: str = Field(
+        default="console",
+        description="Destino dos logs (console, file, both, none)",
+    )
+    file_path: Path = Field(
+        default_factory=lambda: _expand_path("logs/ctrl_prj.log"),
+        description="Caminho do arquivo de log quando destination for file ou both",
+    )
+    max_size_mb: float = Field(
+        default=10.0,
+        gt=0.0,
+        description="Tamanho máximo em MB antes de rotacionar o arquivo de log",
+    )
+    max_backups: int = Field(
+        default=5,
+        ge=0,
+        description="Número de arquivos de backup mantidos após rotação",
+    )
+    compress: bool = Field(
+        default=True,
+        description="Se deve compactar os arquivos de log rotacionados com gzip (.gz)",
+    )
+    format: str = Field(
+        default="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        description="Formato das mensagens de log",
+    )
+
+    @field_validator("level", mode="before")
+    @classmethod
+    def _validate_level(cls, v: Any) -> str:
+        if v is None:
+            return "INFO"
+        s = str(v).strip().upper()
+        allowed = {"DEBUG", "INFO", "WARNING", "ERROR"}
+        if s not in allowed:
+            raise ValueError(
+                f"Nível de log inválido '{v}'. Níveis válidos são: {', '.join(sorted(allowed))}"
+            )
+        return s
+
+    @field_validator("destination", mode="before")
+    @classmethod
+    def _validate_destination(cls, v: Any) -> str:
+        if v is None:
+            return "console"
+        s = str(v).strip().lower()
+        if s == "off":
+            s = "none"
+        allowed = {"console", "file", "both", "none"}
+        if s not in allowed:
+            raise ValueError(
+                f"Destino de log inválido '{v}'. Destinos válidos são: {', '.join(sorted(allowed))}"
+            )
+        return s
+
+    @field_validator("file_path", mode="before")
+    @classmethod
+    def _validate_file_path(cls, v: Any) -> Path:
+        if v is None:
+            return _expand_path("logs/ctrl_prj.log")
+        return _expand_path(v)
+
+
 class AppConfig(BaseModel):
     """Configuração global da aplicação ctrl_prj."""
     scan: ScanConfig = Field(default_factory=ScanConfig)
@@ -239,6 +334,7 @@ class AppConfig(BaseModel):
     fingerprint: FingerprintConfig = Field(default_factory=FingerprintConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     reporter: ReporterConfig = Field(default_factory=ReporterConfig)
+    logging: LoggingConfig = Field(default_factory=LoggingConfig)
 
     @model_validator(mode="before")
     @classmethod
@@ -269,9 +365,6 @@ class AppConfig(BaseModel):
         if "follow_symlinks" in normalized:
             scan_dict["follow_symlinks"] = normalized.pop("follow_symlinks")
 
-        if scan_dict:
-            normalized["scan"] = scan_dict
-
         # Normaliza database se informado como string/Path no topo
         if "database" in normalized and isinstance(normalized["database"], (str, Path)):
             normalized["database"] = {"path": normalized["database"]}
@@ -284,9 +377,17 @@ class AppConfig(BaseModel):
             else:
                 reporter_dict = {}
 
+        # Migra chaves de scan que possam ter sido indentadas sob reporter por engano
+        for scan_key in ("exclusions", "code_extensions", "context_files", "follow_symlinks"):
+            if scan_key in reporter_dict and scan_key not in scan_dict:
+                scan_dict[scan_key] = reporter_dict.pop(scan_key)
+
         for dev_key in ("device", "dispositivo", "Dispositivo", "device_name"):
             if dev_key in normalized:
                 reporter_dict["device"] = normalized.pop(dev_key)
+
+        if scan_dict:
+            normalized["scan"] = scan_dict
 
         if reporter_dict:
             normalized["reporter"] = reporter_dict
@@ -318,6 +419,22 @@ class AppConfig(BaseModel):
     def database_path(self) -> Path:
         """Atalho de conveniência para database.path."""
         return self.database.path
+
+    @property
+    def log_level(self) -> str:
+        """Atalho de conveniência para logging.level."""
+        return self.logging.level
+
+    @property
+    def log_destination(self) -> str:
+        """Atalho de conveniência para logging.destination."""
+        return self.logging.destination
+
+    @property
+    def traffic_log(self) -> str:
+        """Atalho de conveniência para llm.traffic_log."""
+        return self.llm.traffic_log
+
 
 
 def load_config(path: Optional[Union[str, Path]] = None) -> AppConfig:
@@ -397,6 +514,8 @@ def load_config(path: Optional[Union[str, Path]] = None) -> AppConfig:
             cfg.database.path = (base_dir / cfg.database.path).resolve()
         if not cfg.reporter.output_dir.is_absolute():
             cfg.reporter.output_dir = (base_dir / cfg.reporter.output_dir).resolve()
+        if not cfg.logging.file_path.is_absolute():
+            cfg.logging.file_path = (base_dir / cfg.logging.file_path).resolve()
         resolved_roots = []
         for r in cfg.scan.roots:
             if not r.is_absolute():
