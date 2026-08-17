@@ -246,6 +246,19 @@ class ReporterConfig(BaseModel):
         default_factory=_default_device_name,
         description="Nome ou identificador do dispositivo/computador",
     )
+    include_missing: bool = Field(
+        default=True,
+        description="Se deve incluir entidades com status 'missing' (não encontradas) nos relatórios",
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_missing_flags(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            # Suporta o alias exclude_missing
+            if "exclude_missing" in data and "include_missing" not in data:
+                data["include_missing"] = not bool(data.pop("exclude_missing"))
+        return data
 
     @field_validator("output_dir", mode="before")
     @classmethod
@@ -352,7 +365,9 @@ class AppConfig(BaseModel):
 
         # Normaliza scan e raízes se informadas no topo
         scan_dict = normalized.get("scan")
-        if not isinstance(scan_dict, dict):
+        if isinstance(scan_dict, BaseModel):
+            scan_dict = scan_dict.model_dump()
+        elif not isinstance(scan_dict, dict):
             scan_dict = {}
 
         if "roots" in normalized:
@@ -376,7 +391,9 @@ class AppConfig(BaseModel):
 
         # Normaliza reporter e device se informados no topo
         reporter_dict = normalized.get("reporter")
-        if not isinstance(reporter_dict, dict):
+        if isinstance(reporter_dict, BaseModel):
+            reporter_dict = reporter_dict.model_dump()
+        elif not isinstance(reporter_dict, dict):
             if isinstance(reporter_dict, (str, Path)):
                 reporter_dict = {"output_dir": reporter_dict}
             else:
@@ -390,6 +407,10 @@ class AppConfig(BaseModel):
         for dev_key in ("device", "dispositivo", "Dispositivo", "device_name"):
             if dev_key in normalized:
                 reporter_dict["device"] = normalized.pop(dev_key)
+
+        for rep_key in ("include_missing", "exclude_missing"):
+            if rep_key in normalized:
+                reporter_dict[rep_key] = normalized.pop(rep_key)
 
         if scan_dict:
             normalized["scan"] = scan_dict

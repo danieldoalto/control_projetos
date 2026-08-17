@@ -130,6 +130,11 @@ reporter:
   # Identificador deste computador/dispositivo (usado como prefixo nos arquivos de relatórios)
   device: meu-computador
 
+  # Define se projetos com status 'missing' (não encontrados) devem ser incluídos nos relatórios (padrão: true)
+  # Se false (ou se utilizar exclude_missing: true), remove os projetos excluídos dos relatórios e do INDEX.md
+  include_missing: true
+
+
 # Configurações do Subsistema de Logs
 logging:
   # Nível de detalhamento: DEBUG, INFO, WARNING, ERROR

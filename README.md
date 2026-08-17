@@ -168,6 +168,7 @@ llm:
 reporter:
   output_dir: reports
   device: notebook  # Identificador deste computador/nó (usado como prefixo)
+  include_missing: false  # Se false, oculta projetos não encontrados nos relatórios e no INDEX.md (padrão: true)
 ```
 
 ---
@@ -264,6 +265,9 @@ uv run ctrl_prj report
 # Gerar relatórios apenas para as pastas/projetos especificados:
 uv run ctrl_prj report /caminho/projeto1
 
+# Ocultar projetos missing (não encontrados) dos relatórios:
+uv run ctrl_prj report --exclude-missing
+
 # Especificando pasta de saída customizada:
 uv run ctrl_prj report -o ./meus_relatorios
 ```
@@ -277,6 +281,9 @@ uv run ctrl_prj run
 
 # Pipeline completo direcionado exclusivamente a um projeto ou pasta:
 uv run ctrl_prj run /caminho/meu-projeto
+
+# Pipeline completo ocultando projetos missing:
+uv run ctrl_prj run --exclude-missing
 
 # Pipeline completo forçando re-escaneamento e reanálise:
 uv run ctrl_prj run --force     # ou -f

@@ -504,6 +504,10 @@ def generate_reports(
                     matched_entities.append(e)
             entities = matched_entities
 
+        # Oculta entidades com status 'missing' se include_missing for False
+        if not getattr(config.reporter, "include_missing", True):
+            entities = [e for e in entities if e.status != "missing"]
+
         result.total_entities = len(entities)
 
         if not entities:

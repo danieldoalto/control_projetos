@@ -141,5 +141,12 @@ def test_cli_target_paths_flag(mock_cli_config, tmp_path, capsys):
     assert "varredura direcionada" in captured.out.lower()
 
 
+def test_cli_exclude_missing_flag(mock_cli_config):
+    """Verifica se a flag --exclude-missing é aceita em report e run."""
+    assert main(["-c", mock_cli_config, "report", "--exclude-missing"]) == 0
+    assert main(["-c", mock_cli_config, "run", "--exclude-missing"]) == 0
+
+
+
 
 

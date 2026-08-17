@@ -384,3 +384,36 @@ def test_generate_reports_with_target_paths_preserves_index(tmp_path: Path):
     assert index_file.read_text(encoding="utf-8") == original_index_content
 
 
+def test_generate_reports_exclude_missing(tmp_path: Path):
+    """Garante que entidades com status 'missing' sejam omitidas dos relatórios quando include_missing=False."""
+    from ctrl_prj.config import AppConfig, ReporterConfig
+    from ctrl_prj.memory import Database, EntityRepository, RootRepository
+
+    db_file = tmp_path / "test_rep_missing.db"
+    db = Database(db_file)
+
+    with db.get_connection() as conn:
+        root_rec = RootRepository(conn).get_or_create(str(tmp_path))
+        repo = EntityRepository(conn)
+        repo.upsert(EntityRecord(root_id=root_rec.id, path=str(tmp_path / "app_active"), name="app_active", type="project", status="analyzed"))
+        repo.upsert(EntityRecord(root_id=root_rec.id, path=str(tmp_path / "app_missing"), name="app_missing", type="project", status="missing"))
+
+    out_dir = tmp_path / "reports_no_missing"
+    config = AppConfig(
+        device="test-device",
+        reporter=ReporterConfig(output_dir=out_dir, include_missing=False),
+    )
+
+    result = generate_reports(config, db, output_dir=out_dir)
+
+    assert result.total_entities == 1
+    assert result.total_reports == 1
+    assert (out_dir / "projects" / "test-device-app-active.md").exists()
+    assert not (out_dir / "projects" / "test-device-app-missing.md").exists()
+
+    index_text = result.index_path.read_text(encoding="utf-8")
+    assert "app_active" in index_text
+    assert "app_missing" not in index_text
+
+
+

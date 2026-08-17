@@ -248,6 +248,34 @@ def test_load_traffic_log_config(tmp_path):
         LLMConfig(traffic_log="invalido_123")
 
 
+def test_load_include_missing_config(tmp_path):
+    """Verifica carregamento de include_missing e exclude_missing."""
+    # 1. Padrão: True
+    c1 = tmp_path / "c1.yml"
+    c1.write_text("reporter:\n  output_dir: reports\n", encoding="utf-8")
+    cfg1 = load_config(c1)
+    assert cfg1.reporter.include_missing is True
+
+    # 2. include_missing: false
+    c2 = tmp_path / "c2.yml"
+    c2.write_text("reporter:\n  include_missing: false\n", encoding="utf-8")
+    cfg2 = load_config(c2)
+    assert cfg2.reporter.include_missing is False
+
+    # 3. exclude_missing: true
+    c3 = tmp_path / "c3.yml"
+    c3.write_text("reporter:\n  exclude_missing: true\n", encoding="utf-8")
+    cfg3 = load_config(c3)
+    assert cfg3.reporter.include_missing is False
+
+    # 4. No topo: include_missing: false
+    c4 = tmp_path / "c4.yml"
+    c4.write_text("include_missing: false\n", encoding="utf-8")
+    cfg4 = load_config(c4)
+    assert cfg4.reporter.include_missing is False
+
+
+
 
 
 

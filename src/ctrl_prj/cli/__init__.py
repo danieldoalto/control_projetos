@@ -302,6 +302,18 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Diretório de saída para os relatórios Markdown (padrão: reports/)",
     )
+    report_parser.add_argument(
+        "--exclude-missing",
+        action="store_true",
+        default=None,
+        help="Oculta entidades com status 'missing' (não encontradas) dos relatórios e do INDEX.md",
+    )
+    report_parser.add_argument(
+        "--include-missing",
+        action="store_true",
+        default=None,
+        help="Inclui entidades com status 'missing' nos relatórios e no INDEX.md",
+    )
 
     # run
     run_parser = subparsers.add_parser(
@@ -334,6 +346,18 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Força re-escaneamento e reanálise de todas as entidades",
     )
+    run_parser.add_argument(
+        "--exclude-missing",
+        action="store_true",
+        default=None,
+        help="Oculta entidades com status 'missing' dos relatórios e do INDEX.md",
+    )
+    run_parser.add_argument(
+        "--include-missing",
+        action="store_true",
+        default=None,
+        help="Inclui entidades com status 'missing' nos relatórios e no INDEX.md",
+    )
 
     return parser
 
@@ -356,6 +380,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         config = load_config(args.config)
         if args.llm_traffic:
             config.llm.traffic_log = args.llm_traffic
+        if getattr(args, "exclude_missing", None):
+            config.reporter.include_missing = False
+        elif getattr(args, "include_missing", None):
+            config.reporter.include_missing = True
         args.app_config = config
         setup_logging(
             config=config.logging,
