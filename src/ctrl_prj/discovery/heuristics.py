@@ -49,6 +49,17 @@ def is_project_directory(
     if not dir_path.is_dir():
         return False
 
+    # 0. Proteção: Ambientes virtuais e pacotes instalados NUNCA são projetos
+    name_dir_lower = dir_path.name.lower()
+    if name_dir_lower in {"site-packages", "dist-packages", "node_modules", ".venv", "venv", "__pycache__"}:
+        return False
+    if (dir_path / "pyvenv.cfg").is_file() or (dir_path / "conda-meta").is_dir():
+        return False
+
+    # 1. Repositório Git (.git) é um marcador inequívoco de projeto
+    if (dir_path / ".git").exists():
+        return True
+
     if code_extensions is None:
         code_exts = {ext.lower() for ext in DEFAULT_CODE_EXTENSIONS}
     else:
@@ -68,7 +79,7 @@ def is_project_directory(
 
         name_lower = entry.name.lower()
 
-        # 1. Marcador explícito de projeto
+        # 2. Marcador explícito de projeto (build/manifestos)
         if entry.is_file() and name_lower in PROJECT_MARKER_FILES:
             return True
 

@@ -213,3 +213,50 @@ def test_discovery_root_directory_not_treated_as_leaf_project(tmp_path):
     paths = {e.path for e in entities}
     assert paths == {sub_proj1.resolve(), sub_proj2.resolve()}
 
+
+def test_discovery_git_repo_detected(tmp_path):
+    """Garante que uma pasta contendo .git seja classificada como projeto mesmo sem arquivos na raiz."""
+    root = tmp_path / "workspace"
+    root.mkdir()
+    git_proj = root / "openwebui"
+    git_proj.mkdir()
+    (git_proj / ".git").mkdir()
+    (git_proj / "README.md").write_text("# OpenWebUI\n", encoding="utf-8")
+    
+    # Código apenas em subpasta
+    src = git_proj / "src"
+    src.mkdir()
+    (src / "app.py").write_text("print('webui')\n", encoding="utf-8")
+
+    entities = discover_entities([root])
+    assert len(entities) == 1
+    assert entities[0].path == git_proj.resolve()
+    assert entities[0].name == "openwebui"
+
+
+def test_discovery_custom_virtualenv_ignored(tmp_path):
+    """Garante que ambientes virtuais customizados (como webui-env) e site-packages sejam ignorados."""
+    root = tmp_path / "workspace"
+    root.mkdir()
+    proj = root / "meu_projeto"
+    proj.mkdir()
+    (proj / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+
+    # Virtualenv com nome customizado dentro do projeto
+    custom_venv = proj / "webui-env"
+    custom_venv.mkdir()
+    (custom_venv / "pyvenv.cfg").write_text("home = /usr/bin\n", encoding="utf-8")
+    
+    # Pacotes instalados no site-packages dentro do venv
+    site_pkg = custom_venv / "Lib" / "site-packages" / "fake_package"
+    site_pkg.mkdir(parents=True)
+    (site_pkg / "pyproject.toml").write_text("[project]\nname='fake'\n", encoding="utf-8")
+    (site_pkg / "lib.py").write_text("x = 1\n", encoding="utf-8")
+
+    entities = discover_entities([root])
+    # Apenas 'meu_projeto' deve ser descoberto, 'fake_package' dentro do venv DEVE ser ignorado!
+    assert len(entities) == 1
+    assert entities[0].path == proj.resolve()
+    assert entities[0].name == "meu_projeto"
+
+

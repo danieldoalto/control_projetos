@@ -11,10 +11,18 @@ from ctrl_prj.discovery.models import DiscoveredEntity
 def _is_excluded(path: Path, exclusion_set: Set[str]) -> bool:
     """Verifica se o arquivo ou diretório corresponde a uma exclusão."""
     name = path.name
-    if name in exclusion_set:
+    name_lower = name.lower()
+
+    # Ambientes virtuais e pacotes instalados
+    if name_lower in {"site-packages", "dist-packages", "node_modules", "__pycache__"}:
+        return True
+    if path.is_dir() and ((path / "pyvenv.cfg").is_file() or (path / "conda-meta").is_dir()):
+        return True
+
+    if name in exclusion_set or name_lower in exclusion_set:
         return True
     for excl in exclusion_set:
-        if fnmatch.fnmatch(name, excl) or path.match(excl) or path.match(f"*/{excl}") or path.match(f"*/{excl}/*"):
+        if fnmatch.fnmatch(name, excl) or fnmatch.fnmatch(name_lower, excl.lower()) or path.match(excl) or path.match(f"*/{excl}") or path.match(f"*/{excl}/*"):
             return True
     return False
 
