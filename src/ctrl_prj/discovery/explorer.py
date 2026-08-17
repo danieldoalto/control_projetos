@@ -10,21 +10,27 @@ from ctrl_prj.discovery.models import DiscoveredEntity
 
 def _is_excluded(path: Path, exclusion_set: Set[str]) -> bool:
     """Verifica se o arquivo ou diretório corresponde a uma exclusão."""
-    name = path.name
-    name_lower = name.lower()
+    try:
+        name = path.name
+        name_lower = name.lower()
 
-    # Ambientes virtuais e pacotes instalados
-    if name_lower in {"site-packages", "dist-packages", "node_modules", "__pycache__"}:
-        return True
-    if path.is_dir() and ((path / "pyvenv.cfg").is_file() or (path / "conda-meta").is_dir()):
-        return True
-
-    if name in exclusion_set or name_lower in exclusion_set:
-        return True
-    for excl in exclusion_set:
-        if fnmatch.fnmatch(name, excl) or fnmatch.fnmatch(name_lower, excl.lower()) or path.match(excl) or path.match(f"*/{excl}") or path.match(f"*/{excl}/*"):
+        # Ambientes virtuais e pacotes instalados
+        if name_lower in {"site-packages", "dist-packages", "node_modules", "__pycache__"}:
             return True
-    return False
+        try:
+            if path.is_dir() and ((path / "pyvenv.cfg").is_file() or (path / "conda-meta").is_dir()):
+                return True
+        except (PermissionError, OSError):
+            return True
+
+        if name in exclusion_set or name_lower in exclusion_set:
+            return True
+        for excl in exclusion_set:
+            if fnmatch.fnmatch(name, excl) or fnmatch.fnmatch(name_lower, excl.lower()) or path.match(excl) or path.match(f"*/{excl}") or path.match(f"*/{excl}/*"):
+                return True
+        return False
+    except (PermissionError, OSError):
+        return True
 
 
 
@@ -93,17 +99,24 @@ class ProjectExplorer:
         remaining_depth: Optional[int],
     ) -> None:
         """Explora recursivamente um diretório respeitando precedência e fronteiras."""
-        if not self.follow_symlinks and current_dir.is_symlink():
-            return
+        try:
+            if not self.follow_symlinks and current_dir.is_symlink():
+                return
 
-        if _is_excluded(current_dir, self.exclusions):
+            if _is_excluded(current_dir, self.exclusions):
+                return
+        except (PermissionError, OSError):
             return
 
         if remaining_depth is not None and remaining_depth <= 0:
             return
 
         # 1. Precedência: Checagem explícita (.ctrl_prj)
-        manifest = read_manifest(current_dir)
+        try:
+            manifest = read_manifest(current_dir)
+        except (PermissionError, OSError):
+            manifest = None
+
         if manifest is not None:
             if manifest.type == "project":
                 discovered.append(
@@ -144,7 +157,12 @@ class ProjectExplorer:
         # 2. Heurística implícita
         # A própria pasta raiz configurada em 'roots' nunca é classificada como um projeto folha
         # via heurística implícita (ela é uma coleção/contêiner cujos subdiretórios devem ser explorados).
-        if current_dir != root_path and is_project_directory(current_dir, self.code_extensions):
+        try:
+            is_proj = (current_dir != root_path) and is_project_directory(current_dir, self.code_extensions)
+        except (PermissionError, OSError):
+            is_proj = False
+
+        if is_proj:
             discovered.append(
                 DiscoveredEntity(
                     path=current_dir,
@@ -180,13 +198,16 @@ class ProjectExplorer:
             return
 
         for entry in entries:
-            if entry.is_dir():
-                self._explore_dir(
-                    current_dir=entry,
-                    root_path=root_path,
-                    discovered=discovered,
-                    remaining_depth=remaining_depth,
-                )
+            try:
+                if entry.is_dir():
+                    self._explore_dir(
+                        current_dir=entry,
+                        root_path=root_path,
+                        discovered=discovered,
+                        remaining_depth=remaining_depth,
+                    )
+            except (PermissionError, OSError):
+                continue
 
 
 def discover_entities(

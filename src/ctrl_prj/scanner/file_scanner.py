@@ -177,61 +177,70 @@ class FileScanner:
             return
 
         for entry in entries:
-            if not self.follow_symlinks and entry.is_symlink():
-                continue
-
-            if self._is_path_excluded(entry):
-                continue
-
-            if entry.is_dir():
-                self._scan_dir(
-                    current_dir=entry,
-                    entity_root=entity_root,
-                    scanned_files=scanned_files,
-                )
-            elif entry.is_file():
-                info = _classify_file(entry, self.code_extensions, self.context_files)
-                if info is None:
+            try:
+                if not self.follow_symlinks and entry.is_symlink():
                     continue
 
-                ext, lang, is_code, is_context = info
-                try:
-                    stat = entry.stat()
-                except (PermissionError, OSError):
+                if self._is_path_excluded(entry):
                     continue
 
-                rel_path = entry.relative_to(entity_root).as_posix()
-                scanned_files.append(
-                    ScannedFile(
-                        path=entry,
-                        relative_path=rel_path,
-                        extension=ext,
-                        file_type="code" if is_code else "context",
-                        is_code=is_code,
-                        is_context=is_context,
-                        size_bytes=stat.st_size,
-                        mtime=stat.st_mtime,
-                        language=lang,
+                if entry.is_dir():
+                    self._scan_dir(
+                        current_dir=entry,
+                        entity_root=entity_root,
+                        scanned_files=scanned_files,
                     )
-                )
+                elif entry.is_file():
+                    info = _classify_file(entry, self.code_extensions, self.context_files)
+                    if info is None:
+                        continue
+
+                    ext, lang, is_code, is_context = info
+                    try:
+                        stat = entry.stat()
+                    except (PermissionError, OSError):
+                        continue
+
+                    rel_path = entry.relative_to(entity_root).as_posix()
+                    scanned_files.append(
+                        ScannedFile(
+                            path=entry,
+                            relative_path=rel_path,
+                            extension=ext,
+                            file_type="code" if is_code else "context",
+                            is_code=is_code,
+                            is_context=is_context,
+                            size_bytes=stat.st_size,
+                            mtime=stat.st_mtime,
+                            language=lang,
+                        )
+                    )
+            except (PermissionError, OSError):
+                continue
 
     def _is_path_excluded(self, path: Path) -> bool:
         """Verifica se um arquivo ou diretório está na lista de exclusões."""
-        name = path.name
-        name_lower = name.lower()
+        try:
+            name = path.name
+            name_lower = name.lower()
 
-        # Ambientes virtuais e pacotes instalados
-        if name_lower in {"site-packages", "dist-packages", "node_modules", "__pycache__"}:
-            return True
-        if path.is_dir() and ((path / "pyvenv.cfg").is_file() or (path / "conda-meta").is_dir()):
-            return True
-
-        if name in self.exclusions or name_lower in self.exclusions:
-            return True
-        for excl in self.exclusions:
-            if fnmatch.fnmatch(name, excl) or fnmatch.fnmatch(name_lower, excl.lower()) or path.match(excl) or path.match(f"*/{excl}") or path.match(f"*/{excl}/*"):
+            # Ambientes virtuais e pacotes instalados
+            if name_lower in {"site-packages", "dist-packages", "node_modules", "__pycache__"}:
                 return True
-        return False
+            try:
+                if path.is_dir() and ((path / "pyvenv.cfg").is_file() or (path / "conda-meta").is_dir()):
+                    return True
+            except (PermissionError, OSError):
+                return True  # Sem permissão de leitura, ignora o diretório
+
+            if name in self.exclusions or name_lower in self.exclusions:
+                return True
+            for excl in self.exclusions:
+                if fnmatch.fnmatch(name, excl) or fnmatch.fnmatch(name_lower, excl.lower()) or path.match(excl) or path.match(f"*/{excl}") or path.match(f"*/{excl}/*"):
+                    return True
+            return False
+        except (PermissionError, OSError):
+            return True
 
 
 

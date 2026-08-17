@@ -133,3 +133,27 @@ def test_scan_non_existent_entity():
     """Garante retorno vazio para entidades inexistentes."""
     files = scan_entity_files(Path("/caminho/completamente/inexistente/xyz"))
     assert files == []
+
+
+def test_scan_permission_denied_directory(tmp_path):
+    """Garante que diretórios ou arquivos inacessíveis (PermissionError) são ignorados sem falhar."""
+    import os
+    project_dir = tmp_path / "proj_with_restricted_subdir"
+    project_dir.mkdir()
+    (project_dir / "main.py").write_text("print('ok')\n", encoding="utf-8")
+
+    restricted_subdir = project_dir / "restricted_ts_state"
+    restricted_subdir.mkdir()
+    (restricted_subdir / "secret.py").write_text("print('secret')\n", encoding="utf-8")
+
+    try:
+        # Remove permissão de leitura
+        os.chmod(restricted_subdir, 0o000)
+        scanner = FileScanner()
+        files = scanner.scan_entity(project_dir)
+        # O arquivo main.py deve ser escaneado e o diretório restrito ignorado
+        assert any(f.relative_path == "main.py" for f in files)
+    finally:
+        # Restaura permissão para limpeza do tmp_path
+        os.chmod(restricted_subdir, 0o755)
+

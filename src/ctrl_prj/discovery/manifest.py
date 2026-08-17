@@ -17,16 +17,16 @@ def read_manifest(dir_or_file_path: Path) -> Optional[Manifest]:
     Returns:
         Manifest ou None se o arquivo não existir ou não puder ser lido.
     """
-    path = Path(dir_or_file_path)
-    if path.is_dir():
-        manifest_file = path / MANIFEST_FILENAME
-    else:
-        manifest_file = path
-
-    if not manifest_file.is_file():
-        return None
-
     try:
+        path = Path(dir_or_file_path)
+        if path.is_dir():
+            manifest_file = path / MANIFEST_FILENAME
+        else:
+            manifest_file = path
+
+        if not manifest_file.is_file():
+            return None
+
         content = manifest_file.read_text(encoding="utf-8")
     except Exception:
         return None

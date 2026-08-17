@@ -46,57 +46,69 @@ def is_project_directory(
     Returns:
         bool: True se o diretório for heurísticamente classificado como projeto.
     """
-    if not dir_path.is_dir():
-        return False
-
-    # 0. Proteção: Ambientes virtuais e pacotes instalados NUNCA são projetos
-    name_dir_lower = dir_path.name.lower()
-    if name_dir_lower in {"site-packages", "dist-packages", "node_modules", ".venv", "venv", "__pycache__"}:
-        return False
-    if (dir_path / "pyvenv.cfg").is_file() or (dir_path / "conda-meta").is_dir():
-        return False
-
-    # 1. Repositório Git (.git) é um marcador inequívoco de projeto
-    if (dir_path / ".git").exists():
-        return True
-
-    if code_extensions is None:
-        code_exts = {ext.lower() for ext in DEFAULT_CODE_EXTENSIONS}
-    else:
-        code_exts = {ext.lower() for ext in code_extensions}
-
-    has_readme = False
-    has_code_file = False
-
     try:
-        entries = list(dir_path.iterdir())
-    except (PermissionError, OSError):
-        return False
+        if not dir_path.is_dir():
+            return False
 
-    for entry in entries:
-        if entry.is_symlink():
-            continue
+        # 0. Proteção: Ambientes virtuais e pacotes instalados NUNCA são projetos
+        name_dir_lower = dir_path.name.lower()
+        if name_dir_lower in {"site-packages", "dist-packages", "node_modules", ".venv", "venv", "__pycache__"}:
+            return False
+        try:
+            if (dir_path / "pyvenv.cfg").is_file() or (dir_path / "conda-meta").is_dir():
+                return False
+        except (PermissionError, OSError):
+            return False
 
-        name_lower = entry.name.lower()
+        # 1. Repositório Git (.git) é um marcador inequívoco de projeto
+        try:
+            if (dir_path / ".git").exists():
+                return True
+        except (PermissionError, OSError):
+            pass
 
-        # 2. Marcador explícito de projeto (build/manifestos)
-        if entry.is_file() and name_lower in PROJECT_MARKER_FILES:
+        if code_extensions is None:
+            code_exts = {ext.lower() for ext in DEFAULT_CODE_EXTENSIONS}
+        else:
+            code_exts = {ext.lower() for ext in code_extensions}
+
+        has_readme = False
+        has_code_file = False
+
+        try:
+            entries = list(dir_path.iterdir())
+        except (PermissionError, OSError):
+            return False
+
+        for entry in entries:
+            try:
+                if entry.is_symlink():
+                    continue
+
+                name_lower = entry.name.lower()
+
+                # 2. Marcador explícito de projeto (build/manifestos)
+                if entry.is_file() and name_lower in PROJECT_MARKER_FILES:
+                    return True
+
+                if entry.is_file():
+                    if name_lower in README_MARKERS:
+                        has_readme = True
+
+                    ext = entry.suffix.lower()
+                    if ext in code_exts:
+                        has_code_file = True
+            except (PermissionError, OSError):
+                continue
+
+        # 2. README acompanhado de arquivo de código no mesmo diretório
+        if has_readme and has_code_file:
             return True
 
-        if entry.is_file():
-            if name_lower in README_MARKERS:
-                has_readme = True
+        # 3. Presença de arquivos de código reconhecidos no diretório
+        if has_code_file:
+            return True
 
-            ext = entry.suffix.lower()
-            if ext in code_exts:
-                has_code_file = True
-
-    # 2. README acompanhado de arquivo de código no mesmo diretório
-    if has_readme and has_code_file:
-        return True
-
-    # 3. Presença de arquivos de código reconhecidos no diretório
-    if has_code_file:
-        return True
-
-    return False
+        return False
+    except (PermissionError, OSError):
+        return False

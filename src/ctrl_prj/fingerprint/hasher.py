@@ -32,10 +32,13 @@ def hash_file(file_path: Union[str, Path], algorithm: str = "sha256") -> str:
     """
     path_obj = Path(file_path)
     h = hashlib.new(algorithm)
-    with path_obj.open("rb") as f:
-        while chunk := f.read(CHUNK_SIZE):
-            h.update(chunk)
-    return h.hexdigest()
+    try:
+        with path_obj.open("rb") as f:
+            while chunk := f.read(CHUNK_SIZE):
+                h.update(chunk)
+        return h.hexdigest()
+    except (PermissionError, OSError):
+        return hash_bytes(b"", algorithm=algorithm)
 
 
 def hash_scanned_file(scanned_file: ScannedFile, algorithm: str = "sha256") -> HashedFile:
