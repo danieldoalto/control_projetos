@@ -29,12 +29,13 @@ def test_default_config_when_no_file(tmp_path, monkeypatch):
 def test_load_valid_config(tmp_path):
     """Verifica o carregamento correto de um arquivo YAML válido com expansão de caminhos."""
     config_file = tmp_path / "custom_config.yml"
+    outro_proj = (tmp_path / "outro_projeto").resolve()
     config_file.write_text(
-        """
+        f"""
 scan:
   roots:
     - ~/projetos_teste
-    - /tmp/outro_projeto
+    - "{outro_proj.as_posix()}"
   exclusions:
     - .git
     - build
@@ -56,7 +57,7 @@ reporter:
 
     assert len(cfg.roots) == 2
     assert cfg.roots[0] == Path("~/projetos_teste").expanduser().resolve()
-    assert cfg.roots[1] == Path("/tmp/outro_projeto").resolve()
+    assert cfg.roots[1] == outro_proj
     assert cfg.exclusions == [".git", "build"]
     assert cfg.database.path == Path("~/minhas_bases/ctrl.db").expanduser().resolve()
     assert cfg.llm.provider == "anthropic"
@@ -166,13 +167,15 @@ OUTRA_VARIAVEL=valor_sem_aspas
 def test_load_individual_projects_config(tmp_path):
     """Verifica se individual_projects é carregado e tem seus caminhos resolvidos."""
     config_file = tmp_path / "indiv_config.yml"
+    raiz1 = (tmp_path / "raiz1").resolve()
+    proj_avulso = (tmp_path / "projeto_avulso").resolve()
     config_file.write_text(
-        """
+        f"""
 scan:
   roots:
-    - /tmp/raiz1
+    - "{raiz1.as_posix()}"
   individual_projects:
-    - /tmp/projeto_avulso
+    - "{proj_avulso.as_posix()}"
     - ./relativo_indiv
 """,
         encoding="utf-8",
@@ -180,7 +183,7 @@ scan:
     cfg = load_config(config_file)
     assert len(cfg.roots) == 1
     assert len(cfg.individual_projects) == 2
-    assert cfg.individual_projects[0] == Path("/tmp/projeto_avulso").resolve()
+    assert cfg.individual_projects[0] == proj_avulso
     assert cfg.individual_projects[1] == (tmp_path / "relativo_indiv").resolve()
 
 

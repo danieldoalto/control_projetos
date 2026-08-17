@@ -276,9 +276,9 @@ def test_cli_report_integration(tmp_path: Path, capsys):
         f"""
 device: my-machine
 database:
-  path: "{db_path}"
+  path: "{db_path.as_posix()}"
 reporter:
-  output_dir: "{out_dir}"
+  output_dir: "{out_dir.as_posix()}"
 """,
         encoding="utf-8",
     )

@@ -52,13 +52,13 @@ def e2e_workspace(tmp_path: Path):
         f"""
 device: e2e-node
 database:
-  path: "{db_path}"
+  path: "{db_path.as_posix()}"
 llm:
   provider: "mock"
 reporter:
-  output_dir: "{reports_dir}"
+  output_dir: "{reports_dir.as_posix()}"
 roots:
-  - "{workspace_dir}"
+  - "{workspace_dir.as_posix()}"
 """,
         encoding="utf-8",
     )

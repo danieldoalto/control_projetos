@@ -305,14 +305,16 @@ def test_analyze_cli_integration(temp_workspace, capsys):
 
     # Cria arquivo de configuração temporário
     config_file = temp_workspace["tmp_path"] / "config.yml"
+    db_path_posix = Path(temp_workspace["db"].db_path).as_posix()
+    root_posix = Path(temp_workspace["tmp_path"]).as_posix()
     config_file.write_text(
         f"""
 database:
-  path: "{temp_workspace['db'].db_path}"
+  path: "{db_path_posix}"
 llm:
   provider: "mock"
 roots:
-  - "{temp_workspace['tmp_path']}"
+  - "{root_posix}"
 """,
         encoding="utf-8",
     )

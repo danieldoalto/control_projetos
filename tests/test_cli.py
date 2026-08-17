@@ -13,13 +13,13 @@ def mock_cli_config(tmp_path: Path):
     config_file.write_text(
         f"""
 database:
-  path: "{db_path}"
+  path: "{db_path.as_posix()}"
 llm:
   provider: "mock"
 reporter:
-  output_dir: "{tmp_path / 'reports'}"
+  output_dir: "{(tmp_path / 'reports').as_posix()}"
 roots:
-  - "{tmp_path}"
+  - "{tmp_path.as_posix()}"
 """,
         encoding="utf-8",
     )

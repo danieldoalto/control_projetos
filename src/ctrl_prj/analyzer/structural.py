@@ -4,6 +4,7 @@ import ast
 from pathlib import Path
 import re
 from typing import List, Optional, Set, Union
+import warnings
 
 from ctrl_prj.analyzer.models import FileStructure
 
@@ -71,7 +72,9 @@ def _analyze_python(code: str, line_count: int) -> FileStructure:
     functions: List[str] = []
 
     try:
-        tree = ast.parse(code)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", SyntaxWarning)
+            tree = ast.parse(code)
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:

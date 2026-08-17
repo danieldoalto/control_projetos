@@ -144,9 +144,9 @@ def test_cli_scan_command_execution(tmp_path, capsys):
         f"""
 scan:
   roots:
-    - {workspace}
+    - "{workspace.as_posix()}"
 database:
-  path: {db_file}
+  path: "{db_file.as_posix()}"
 """,
         encoding="utf-8",
     )

@@ -83,7 +83,7 @@ def test_scanned_file_metadata_and_classification(tmp_path):
     assert py_scanned.is_code is True
     assert py_scanned.is_context is False
     assert py_scanned.file_type == "code"
-    assert py_scanned.size_bytes == len(py_content.encode("utf-8"))
+    assert py_scanned.size_bytes == py_file.stat().st_size
     assert py_scanned.mtime > 0
 
     # Verifica README.md
