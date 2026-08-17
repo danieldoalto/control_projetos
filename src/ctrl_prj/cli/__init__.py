@@ -189,16 +189,44 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Cria e configura o analisador de argumentos da CLI."""
+    """Cria e configura o analisador de argumentos da CLI com documentação e exemplos."""
     parser = argparse.ArgumentParser(
         prog="ctrl_prj",
-        description="ctrl_prj: catalogação e identificação de projetos no filesystem.",
+        description="""
+ctrl_prj: catalogação, análise incremental com IA e geração de relatórios para Obsidian.
+
+Comandos disponíveis:
+  scan      Varre o filesystem, detecta projetos e calcula fingerprints (sem IA)
+  analyze   Executa interpretação semântica com IA nas entidades novas/modificadas
+  report    Gera relatórios individuais em Markdown e o índice geral INDEX.md
+  run       Executa o pipeline completo integrado: scan -> analyze -> report
+""",
+        epilog="""
+Exemplos de uso geral:
+  # Executar pipeline completo em todo o repositório:
+  ctrl_prj run
+
+  # Escanear ou analisar apenas uma pasta ou projeto específico:
+  ctrl_prj scan D:\\Projetos\\openwebui
+  ctrl_prj analyze D:\\Projetos\\openwebui
+  ctrl_prj report D:\\Projetos\\openwebui
+
+  # Executar pipeline completo em múltiplos projetos específicos:
+  ctrl_prj run /home/user/app1 /home/user/app2
+
+  # Gerar relatórios ocultando entidades 'missing' (não encontradas):
+  ctrl_prj report --exclude-missing
+
+  # Inspecionar tráfego de rede e prompts do LLM em tempo real:
+  ctrl_prj --llm-traffic full analyze
+""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         "-c",
         "--config",
         default=None,
-        help="Caminho do arquivo de configuração (padrão: config.yml)",
+        help="Caminho do arquivo de configuração alternativo (padrão: config.yml)",
     )
     parser.add_argument(
         "--log-level",
@@ -216,7 +244,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--llm-traffic",
         default=None,
         choices=["none", "basic", "full", "nenhum", "basico", "básico", "completo"],
-        help="Nível de log do tráfego LLM (none, basic, full)",
+        help="Nível de auditoria do tráfego LLM (none, basic, full)",
     )
 
     subparsers = parser.add_subparsers(
@@ -228,7 +256,27 @@ def build_parser() -> argparse.ArgumentParser:
     # scan
     scan_parser = subparsers.add_parser(
         "scan",
-        help="Descobre e atualiza o estado do filesystem (sem LLM)",
+        help="Descobre e atualiza o estado do filesystem no SQLite (sem IA)",
+        description="""
+Descobre entidades, varre arquivos relevantes, calcula hashes SHA-256 e armazena o estado no banco SQLite.
+Não realiza chamadas de IA.
+""",
+        epilog="""
+Exemplos:
+  # Escanear todas as raízes e projetos configurados no config.yml:
+  ctrl_prj scan
+
+  # Escanear apenas uma pasta ou projeto específico:
+  ctrl_prj scan D:\\Projetos\\openwebui
+  ctrl_prj scan ~/projetos/meu-app
+
+  # Escanear múltiplos projetos de uma vez:
+  ctrl_prj scan /caminho/proj1 /caminho/proj2
+
+  # Forçar sincronização e purga de arquivos excluídos:
+  ctrl_prj scan --force
+""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     scan_parser.add_argument(
         "paths",
@@ -242,7 +290,7 @@ def build_parser() -> argparse.ArgumentParser:
         dest="opt_paths",
         nargs="+",
         default=None,
-        help="Pastas específicas para escanear",
+        help="Pastas específicas para escanear (alias para caminhos posicionais)",
     )
     scan_parser.add_argument(
         "-f",
@@ -255,6 +303,25 @@ def build_parser() -> argparse.ArgumentParser:
     analyze_parser = subparsers.add_parser(
         "analyze",
         help="Analisa entidades novas ou modificadas com LLM",
+        description="""
+Consulta entidades com status 'new', 'changed' ou 'error' no SQLite, constrói o contexto
+estrutural leve (AST, classes, imports) e envia ao LLM para enriquecimento semântico.
+""",
+        epilog="""
+Exemplos:
+  # Analisar todas as entidades pendentes de análise:
+  ctrl_prj analyze
+
+  # Analisar apenas um projeto ou pasta específica:
+  ctrl_prj analyze D:\\Projetos\\openwebui
+
+  # Forçar reanálise com IA de todas as entidades (mesmo já analisadas):
+  ctrl_prj analyze --force
+
+  # Forçar reanálise apenas de um projeto específico:
+  ctrl_prj analyze -f D:\\Projetos\\openwebui
+""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     analyze_parser.add_argument(
         "paths",
@@ -280,7 +347,26 @@ def build_parser() -> argparse.ArgumentParser:
     # report
     report_parser = subparsers.add_parser(
         "report",
-        help="Gera relatórios em Markdown",
+        help="Gera relatórios em Markdown e o catálogo consolidado INDEX.md",
+        description="""
+Gera relatórios individuais em formato Markdown na pasta 'projects/' e cria o catálogo mestre INDEX.md.
+Se executado para projetos específicos, atualiza apenas seus relatórios individuais e preserva o INDEX.md geral.
+""",
+        epilog="""
+Exemplos:
+  # Gerar relatórios para todas as entidades e atualizar o INDEX.md:
+  ctrl_prj report
+
+  # Gerar relatórios apenas para um projeto específico (preserva o INDEX.md intacto):
+  ctrl_prj report D:\\Projetos\\openwebui
+
+  # Ocultar projetos com status 'missing' (não encontrados no disco):
+  ctrl_prj report --exclude-missing
+
+  # Especificar pasta de saída customizada:
+  ctrl_prj report -o ./meus_relatorios
+""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     report_parser.add_argument(
         "paths",
@@ -319,6 +405,27 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser = subparsers.add_parser(
         "run",
         help="Executa o pipeline completo: scan -> analyze -> report",
+        description="""
+Executa o fluxo completo integrado em sequência:
+  1. SCAN: Varredura e descoberta no filesystem
+  2. ANALYZE: Interpretação semântica com IA
+  3. REPORT: Geração de relatórios Markdown e índice Obsidian
+""",
+        epilog="""
+Exemplos:
+  # Executar o pipeline completo em todo o repositório:
+  ctrl_prj run
+
+  # Executar o pipeline completo apenas em um projeto específico:
+  ctrl_prj run D:\\Projetos\\openwebui
+
+  # Executar ocultando entidades 'missing' dos relatórios:
+  ctrl_prj run --exclude-missing
+
+  # Forçar re-escaneamento e reanálise total de tudo:
+  ctrl_prj run --force
+""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     run_parser.add_argument(
         "paths",
