@@ -134,7 +134,9 @@ class ProjectExplorer:
                 return
 
         # 2. Heurística implícita
-        if is_project_directory(current_dir, self.code_extensions):
+        # A própria pasta raiz configurada em 'roots' nunca é classificada como um projeto folha
+        # via heurística implícita (ela é uma coleção/contêiner cujos subdiretórios devem ser explorados).
+        if current_dir != root_path and is_project_directory(current_dir, self.code_extensions):
             discovered.append(
                 DiscoveredEntity(
                     path=current_dir,

@@ -189,3 +189,27 @@ def test_discovery_multiple_roots(tmp_path):
     entities = discover_entities([root1, root2])
     assert len(entities) == 2
     assert {e.name for e in entities} == {"p1", "p2"}
+
+
+def test_discovery_root_directory_not_treated_as_leaf_project(tmp_path):
+    """Garante que a própria raiz com arquivos soltos não engula subprojetos."""
+    root = tmp_path / "MeusProjetos"
+    root.mkdir()
+    # Arquivo solto na raiz
+    (root / "README.md").write_text("# Minha colecao\n", encoding="utf-8")
+    (root / "script_aux.py").write_text("print('aux')\n", encoding="utf-8")
+
+    # Subprojetos reais
+    sub_proj1 = root / "App1"
+    sub_proj1.mkdir()
+    (sub_proj1 / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+
+    sub_proj2 = root / "App2"
+    sub_proj2.mkdir()
+    (sub_proj2 / "package.json").write_text("{}", encoding="utf-8")
+
+    entities = discover_entities([root])
+    assert len(entities) == 2
+    paths = {e.path for e in entities}
+    assert paths == {sub_proj1.resolve(), sub_proj2.resolve()}
+
