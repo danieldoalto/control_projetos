@@ -150,7 +150,10 @@ def cmd_report(args: argparse.Namespace) -> int:
     print(f"📁 Diretório de saída: {result.output_dir}")
     print(f"📦 Total de entidades processadas: {result.total_entities}")
     print(f"📄 Relatórios individuais criados: {result.total_reports} em 'projects/'")
-    print(f"📚 Índice consolidado: '{result.index_path}'")
+    if result.index_path:
+        print(f"📚 Índice consolidado: '{result.index_path}'")
+    else:
+        print("📚 Índice consolidado: preservado intacto (execução direcionada)")
     print("✅ Geração de relatórios concluída com sucesso.")
     logger.info(f"Comando report finalizado: {result.total_reports} relatórios gerados.")
     return 0

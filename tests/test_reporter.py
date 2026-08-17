@@ -345,3 +345,42 @@ def test_generate_index_with_roots_and_individuals(tmp_path: Path):
     assert "[Project One](projects/proj1.md)" in index_md
     assert "[Avulso Script](projects/script.md)" in index_md
 
+
+def test_generate_reports_with_target_paths_preserves_index(tmp_path: Path):
+    """Garante que a geração de relatórios direcionada a uma pasta específica não sobrescreva o INDEX.md global."""
+    from ctrl_prj.config import AppConfig, ReporterConfig
+    from ctrl_prj.memory import Database, EntityRepository
+
+    db_file = tmp_path / "test_rep_target.db"
+    db = Database(db_file)
+
+    with db.get_connection() as conn:
+        from ctrl_prj.memory import RootRepository
+        root_rec = RootRepository(conn).get_or_create(str(tmp_path))
+        repo = EntityRepository(conn)
+        repo.upsert(EntityRecord(root_id=root_rec.id, path=str(tmp_path / "app1"), name="app1", type="project"))
+        repo.upsert(EntityRecord(root_id=root_rec.id, path=str(tmp_path / "app2"), name="app2", type="project"))
+
+    out_dir = tmp_path / "reports"
+    out_dir.mkdir()
+    index_file = out_dir / "test-device-INDEX.md"
+    original_index_content = "# Meu INDEX Geral Completo Antigo"
+    index_file.write_text(original_index_content, encoding="utf-8")
+
+    config = AppConfig(
+        device="test-device",
+        reporter=ReporterConfig(output_dir=out_dir),
+    )
+
+    # Executa report direcionado apenas para app1
+    target = tmp_path / "app1"
+    result = generate_reports(config, db, output_dir=out_dir, target_paths=[target])
+
+    assert result.total_reports == 1
+    assert result.index_path is None
+    # Verifica que o relatório do app1 foi gerado
+    assert (out_dir / "projects" / "test-device-app1.md").exists()
+    # Verifica que o INDEX.md original permaneceu intacto
+    assert index_file.read_text(encoding="utf-8") == original_index_content
+
+

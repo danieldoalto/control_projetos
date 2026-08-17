@@ -557,24 +557,30 @@ def generate_reports(
             rel_link = f"projects/{candidate_filename}"
             index_entries.append((entity, latest_analysis, rel_link))
 
-        # Gera o INDEX.md com agrupamentos por origem
-        index_path = target_dir / index_filename
-        index_content = generate_index(
-            index_entries,
-            target_dir,
-            roots_map=roots_map,
-            config_roots=config.roots,
-            config_individuals=config.individual_projects,
-            device_name=device_name,
-        )
-        index_path.write_text(index_content, encoding="utf-8")
-        result.index_path = index_path
-        result.generated_files.append(index_path)
-
-    logger.info(
-        f"Geração de relatórios concluída: {result.total_reports} relatórios individuais em 'projects/' "
-        f"e índice consolidado em '{result.index_path}'"
-    )
+        # Gera o INDEX.md com agrupamentos por origem apenas na execução global (sem target_paths)
+        if not target_paths:
+            index_path = target_dir / index_filename
+            index_content = generate_index(
+                index_entries,
+                target_dir,
+                roots_map=roots_map,
+                config_roots=config.roots,
+                config_individuals=config.individual_projects,
+                device_name=device_name,
+            )
+            index_path.write_text(index_content, encoding="utf-8")
+            result.index_path = index_path
+            result.generated_files.append(index_path)
+            logger.info(
+                f"Geração de relatórios concluída: {result.total_reports} relatórios individuais em 'projects/' "
+                f"e índice consolidado em '{result.index_path}'"
+            )
+        else:
+            result.index_path = None
+            logger.info(
+                f"Geração de relatórios direcionada concluída: {result.total_reports} relatórios individuais em 'projects/'. "
+                f"O arquivo geral '{index_filename}' foi preservado intacto."
+            )
     return result
 
 
