@@ -4,10 +4,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import json
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Union
 
 from ctrl_prj.config.settings import AppConfig
-from ctrl_prj.discovery import DiscoveredEntity, discover_entities
+from ctrl_prj.discovery import DiscoveredEntity, discover_entities, is_project_directory
 from ctrl_prj.discovery.manifest import read_manifest
 from ctrl_prj.fingerprint.calculator import calculate_entity_fingerprint
 
@@ -271,20 +271,42 @@ def _process_entity(
         )
 
 
-def run_scan(config: AppConfig, db: Database, force: bool = False) -> ScanResult:
-    """Executa o ciclo completo de Scan no filesystem e persiste no SQLite.
+def run_scan(
+    config: AppConfig,
+    db: Database,
+    force: bool = False,
+    target_paths: Optional[List[Union[str, Path]]] = None,
+) -> ScanResult:
+    """Executa a varredura completa das raízes e projetos individuais configurados.
 
     Args:
         config: Configurações da aplicação.
-        db: Instância do banco SQLite.
-        force: Se True, força a sincronização/deleção de arquivos no banco mesmo em entidades inalteradas.
+        db: Instância do banco de dados SQLite.
+        force: Se True, força a sincronização e purga arquivos excluídos de todas as entidades.
+        target_paths: Lista opcional de caminhos específicos para limitar a varredura.
 
     Returns:
-        ScanResult com métricas e detalhes do scan.
+        ScanResult: Resumo com estatísticas da varredura.
     """
     result = ScanResult()
-    roots = config.roots
-    individual_projects = config.individual_projects
+
+    if target_paths:
+        custom_roots: List[Path] = []
+        custom_individuals: List[Path] = []
+        for tp in target_paths:
+            resolved_tp = Path(tp).expanduser().resolve()
+            if not resolved_tp.exists():
+                logger.warning(f"Caminho especificado não encontrado: {resolved_tp}")
+                continue
+            if resolved_tp.is_file() or is_project_directory(resolved_tp, set(config.scan.code_extensions)):
+                custom_individuals.append(resolved_tp)
+            else:
+                custom_roots.append(resolved_tp)
+        roots = custom_roots
+        individual_projects = custom_individuals
+    else:
+        roots = config.roots
+        individual_projects = config.individual_projects
 
     if not roots and not individual_projects:
         logger.warning("Nenhuma raiz ou projeto individual configurado para scan.")

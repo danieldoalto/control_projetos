@@ -3,7 +3,8 @@
 from dataclasses import dataclass, field
 import json
 import logging
-from typing import Callable, List, Optional
+from pathlib import Path
+from typing import Callable, List, Optional, Union
 
 from ctrl_prj.analyzer.context_builder import build_context
 from ctrl_prj.config.settings import AppConfig
@@ -57,6 +58,7 @@ def run_analyze(
     provider: Optional[LLMProvider] = None,
     on_progress: Optional[ProgressCallback] = None,
     force: bool = False,
+    target_paths: Optional[List[Union[str, Path]]] = None,
 ) -> AnalyzeResult:
     """Executa o ciclo de análise LLM para todas as entidades pendentes (new / changed) ou todas se force=True.
 
@@ -66,6 +68,7 @@ def run_analyze(
         provider: Provedor de LLM opcional (se None, instanciado via Factory).
         on_progress: Callback opcional disparado após cada entidade processada.
         force: Se True, força reanálise de todas as entidades (mesmo já analisadas).
+        target_paths: Lista opcional de caminhos específicos para limitar a análise.
 
     Returns:
         AnalyzeResult consolidando métricas e sumário das análises.
@@ -81,6 +84,16 @@ def run_analyze(
         analysis_repo = AnalysisRepository(conn)
 
         all_entities = entity_repo.list_all()
+
+        if target_paths:
+            resolved_targets = [Path(tp).expanduser().resolve() for tp in target_paths]
+            matched_entities: List[EntityRecord] = []
+            for e in all_entities:
+                e_path = Path(e.path).expanduser().resolve()
+                if any(e_path == t or t in e_path.parents for t in resolved_targets):
+                    matched_entities.append(e)
+            all_entities = matched_entities
+
         if force:
             pending_entities: List[EntityRecord] = [
                 e for e in all_entities if e.status != "missing"
@@ -90,7 +103,6 @@ def run_analyze(
                 e for e in all_entities if e.status in ("new", "changed", "error")
             ]
 
-        
         result.already_analyzed_count = len(all_entities) - len(pending_entities)
         result.total_pending = len(pending_entities)
 

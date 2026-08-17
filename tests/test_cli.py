@@ -108,4 +108,38 @@ def test_cli_llm_traffic_flag(mock_cli_config):
     assert exit_code == 0
 
 
+def test_cli_target_paths_positional(mock_cli_config, tmp_path, capsys):
+    """Verifica execução de scan, analyze, report e run com caminhos posicionais."""
+    custom_target = tmp_path / "meu_projeto_alvo"
+    custom_target.mkdir()
+    (custom_target / "pyproject.toml").write_text("[project]\nname='alvo'\n", encoding="utf-8")
+    (custom_target / "main.py").write_text("print('alvo')\n", encoding="utf-8")
+
+    # Scan com caminho posicional
+    assert main(["-c", mock_cli_config, "scan", str(custom_target)]) == 0
+    captured = capsys.readouterr()
+    assert "varredura direcionada" in captured.out.lower()
+
+    # Analyze com caminho posicional
+    assert main(["-c", mock_cli_config, "analyze", str(custom_target)]) == 0
+
+    # Report com caminho posicional
+    assert main(["-c", mock_cli_config, "report", str(custom_target)]) == 0
+
+    # Run com caminho posicional
+    assert main(["-c", mock_cli_config, "run", str(custom_target)]) == 0
+
+
+def test_cli_target_paths_flag(mock_cli_config, tmp_path, capsys):
+    """Verifica execução com a flag -p / --paths."""
+    custom_target = tmp_path / "outro_alvo"
+    custom_target.mkdir()
+    (custom_target / "pyproject.toml").write_text("[project]\nname='outro'\n", encoding="utf-8")
+
+    assert main(["-c", mock_cli_config, "scan", "-p", str(custom_target)]) == 0
+    captured = capsys.readouterr()
+    assert "varredura direcionada" in captured.out.lower()
+
+
+
 

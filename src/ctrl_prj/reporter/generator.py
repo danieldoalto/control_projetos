@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 import re
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple, Union
 
 from ctrl_prj.config.settings import AppConfig
 from ctrl_prj.log import get_logger
@@ -458,6 +458,7 @@ def generate_reports(
     config: AppConfig,
     db: Database,
     output_dir: Optional[Path] = None,
+    target_paths: Optional[List[Union[str, Path]]] = None,
 ) -> ReportResult:
     """Executa a geração completa dos relatórios Markdown a partir do SQLite.
 
@@ -465,6 +466,7 @@ def generate_reports(
         config: Configuração da aplicação.
         db: Instância do banco SQLite.
         output_dir: Caminho customizado para a pasta de relatórios.
+        target_paths: Lista opcional de caminhos específicos para limitar a geração de relatórios.
 
     Returns:
         ReportResult com estatísticas e lista de arquivos gerados.
@@ -492,6 +494,16 @@ def generate_reports(
         roots_map = {r.id: r.path for r in roots if r.id is not None}
 
         entities = entity_repo.list_all()
+
+        if target_paths:
+            resolved_targets = [Path(tp).expanduser().resolve() for tp in target_paths]
+            matched_entities: List[EntityRecord] = []
+            for e in entities:
+                e_path = Path(e.path).expanduser().resolve()
+                if any(e_path == t or t in e_path.parents for t in resolved_targets):
+                    matched_entities.append(e)
+            entities = matched_entities
+
         result.total_entities = len(entities)
 
         if not entities:

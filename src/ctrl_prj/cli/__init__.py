@@ -17,23 +17,43 @@ logger = get_logger(__name__)
 
 
 
+def _extract_target_paths(args: argparse.Namespace) -> Optional[List[Path]]:
+    """Extrai e normaliza caminhos de projetos/pastas passados via CLI."""
+    raw_paths: List[str] = []
+    if getattr(args, "paths", None):
+        raw_paths.extend(args.paths)
+    if getattr(args, "opt_paths", None):
+        raw_paths.extend(args.opt_paths)
+    if not raw_paths:
+        return None
+    return [Path(p).expanduser().resolve() for p in raw_paths]
+
+
 def cmd_scan(args: argparse.Namespace) -> int:
     """Descobre e atualiza o estado do filesystem."""
     config = getattr(args, "app_config", None)
     if not config:
         config = load_config(args.config)
 
-    if not config.roots and not config.individual_projects:
+    target_paths = _extract_target_paths(args)
+
+    if not target_paths and not config.roots and not config.individual_projects:
         print("Nenhuma raiz ('roots') ou projeto individual ('individual_projects') configurado para escanear.")
-        print("Adicione raízes ou projetos no seu arquivo config.yml.")
+        print("Adicione raízes ou projetos no seu arquivo config.yml ou passe caminhos via CLI: ctrl_prj scan <caminho>")
         logger.warning("Comando scan abortado: nenhuma raiz ou projeto configurado.")
         return 0
 
     db = Database(config.database.path)
-    print("🔍 Iniciando varredura do filesystem...")
+    if target_paths:
+        print(f"🔍 Iniciando varredura direcionada para {len(target_paths)} caminho(s) especificado(s)...")
+        for tp in target_paths:
+            print(f"   🎯 Alvo: {tp}")
+    else:
+        print("🔍 Iniciando varredura do filesystem...")
+
     force = getattr(args, "force", False)
-    logger.info(f"Executando comando scan (force={force})...")
-    result: ScanResult = run_scan(config, db, force=force)
+    logger.info(f"Executando comando scan (force={force}, target_paths={target_paths})...")
+    result: ScanResult = run_scan(config, db, force=force, target_paths=target_paths)
 
     print(f"📁 Raízes processadas: {result.roots_scanned}")
     print(f"📦 Total de entidades encontradas: {result.total_entities}")
@@ -67,11 +87,16 @@ def cmd_analyze(args: argparse.Namespace) -> int:
 
     db = Database(config.database.path)
     force = getattr(args, "force", False)
-    logger.info(f"Executando comando analyze (force={force})...")
+    target_paths = _extract_target_paths(args)
+
+    logger.info(f"Executando comando analyze (force={force}, target_paths={target_paths})...")
     if force:
         print("🔍 Buscando TODAS as entidades para análise forçada (--force)...")
     else:
         print("🔍 Buscando entidades pendentes para análise...")
+
+    if target_paths:
+        print(f"   🎯 Limitando análise a {len(target_paths)} caminho(s) especificado(s).")
 
     def on_progress(idx: int, total: int, entity, analysis_result, error_msg):
         if error_msg:
@@ -80,7 +105,7 @@ def cmd_analyze(args: argparse.Namespace) -> int:
             langs = f" ({', '.join(analysis_result.languages)})" if analysis_result.languages else ""
             print(f"  [{idx}/{total}] ✨ Analisado: {entity.name} -> Tipo: {analysis_result.type}{langs}")
 
-    result = run_analyze(config, db, on_progress=on_progress, force=force)
+    result = run_analyze(config, db, on_progress=on_progress, force=force, target_paths=target_paths)
 
     if result.total_pending == 0:
         print("ℹ️  Nenhuma entidade pendente de análise (todas já analisadas ou inalteradas).")
@@ -113,10 +138,14 @@ def cmd_report(args: argparse.Namespace) -> int:
 
     db = Database(config.database.path)
     output_dir = Path(getattr(args, "output", None) or config.reporter.output_dir).expanduser().resolve()
+    target_paths = _extract_target_paths(args)
 
-    logger.info(f"Executando comando report (output_dir={output_dir})...")
+    logger.info(f"Executando comando report (output_dir={output_dir}, target_paths={target_paths})...")
     print(f"📊 Gerando relatórios Markdown em '{output_dir}'...")
-    result = generate_reports(config, db, output_dir=output_dir)
+    if target_paths:
+        print(f"   🎯 Limitando relatórios a {len(target_paths)} caminho(s) especificado(s).")
+
+    result = generate_reports(config, db, output_dir=output_dir, target_paths=target_paths)
 
     print(f"📁 Diretório de saída: {result.output_dir}")
     print(f"📦 Total de entidades processadas: {result.total_entities}")
@@ -199,6 +228,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="Descobre e atualiza o estado do filesystem (sem LLM)",
     )
     scan_parser.add_argument(
+        "paths",
+        nargs="*",
+        default=None,
+        help="Uma ou mais pastas ou projetos específicos para escanear",
+    )
+    scan_parser.add_argument(
+        "-p",
+        "--paths",
+        dest="opt_paths",
+        nargs="+",
+        default=None,
+        help="Pastas específicas para escanear",
+    )
+    scan_parser.add_argument(
         "-f",
         "--force",
         action="store_true",
@@ -209,6 +252,20 @@ def build_parser() -> argparse.ArgumentParser:
     analyze_parser = subparsers.add_parser(
         "analyze",
         help="Analisa entidades novas ou modificadas com LLM",
+    )
+    analyze_parser.add_argument(
+        "paths",
+        nargs="*",
+        default=None,
+        help="Uma ou mais pastas ou projetos específicos para analisar",
+    )
+    analyze_parser.add_argument(
+        "-p",
+        "--paths",
+        dest="opt_paths",
+        nargs="+",
+        default=None,
+        help="Pastas específicas para analisar",
     )
     analyze_parser.add_argument(
         "-f",
@@ -223,6 +280,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="Gera relatórios em Markdown",
     )
     report_parser.add_argument(
+        "paths",
+        nargs="*",
+        default=None,
+        help="Uma ou mais pastas ou projetos específicos para gerar relatórios",
+    )
+    report_parser.add_argument(
+        "-p",
+        "--paths",
+        dest="opt_paths",
+        nargs="+",
+        default=None,
+        help="Pastas específicas para gerar relatórios",
+    )
+    report_parser.add_argument(
         "-o",
         "--output",
         default=None,
@@ -233,6 +304,20 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser = subparsers.add_parser(
         "run",
         help="Executa o pipeline completo: scan -> analyze -> report",
+    )
+    run_parser.add_argument(
+        "paths",
+        nargs="*",
+        default=None,
+        help="Uma ou mais pastas ou projetos específicos para executar o pipeline",
+    )
+    run_parser.add_argument(
+        "-p",
+        "--paths",
+        dest="opt_paths",
+        nargs="+",
+        default=None,
+        help="Pastas específicas para executar o pipeline",
     )
     run_parser.add_argument(
         "-o",
