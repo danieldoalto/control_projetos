@@ -23,7 +23,7 @@ O sistema opera de forma estritamente **incremental** e **econômica**:
 * **Incrementalidade Real:** Se o fingerprint da entidade não mudou, o LLM não é chamado.
 * **Economia de Tokens:** Envio apenas de metadados estruturais leves (AST, imports, classes, funções) e arquivos de contexto essenciais (README, pyproject, package.json, Dockerfile, etc.).
 * **Tags Orientadas ao Domínio:** A IA sintetiza tags conceituais que resumem o propósito e a funcionalidade central do projeto.
-* **Proteção contra Dependências e Caches:** Detecção automática universal de ambientes virtuais (`pyvenv.cfg`, `site-packages`, `*-env`) e exclusão de caches e nós git.
+* **Proteção contra Dependências e Caches:** Detecção automática universal de ambientes virtuais (`pyvenv.cfg`, `site-packages`, `*-env`) e repositórios `.git`.
 
 ---
 
@@ -172,6 +172,52 @@ reporter:
 
 ---
 
+## 🎯 Executando em Pastas ou Projetos Específicos (Alvos via CLI)
+
+Todos os comandos (`scan`, `analyze`, `report`, `run`) permitem processar **uma ou mais pastas específicas** passadas diretamente na linha de comando, sem necessidade de editar o `config.yml`:
+
+### Formas de passar os caminhos:
+1. **Argumentos posicionais diretos**: `ctrl_prj <comando> <caminho1> <caminho2> ...`
+2. **Flag `-p` ou `--paths`**: `ctrl_prj <comando> -p <caminho1> <caminho2> ...`
+
+### Exemplos no Linux / macOS:
+```bash
+# 1. Escanear apenas um projeto
+uv run ctrl_prj scan ~/projetos/meu-app
+
+# 2. Escanear múltiplos projetos
+uv run ctrl_prj scan ~/projetos/app1 ~/projetos/app2
+
+# 3. Analisar com IA apenas uma pasta específica
+uv run ctrl_prj analyze ~/projetos/meu-app
+
+# 4. Forçar reanálise com IA apenas do projeto alvo
+uv run ctrl_prj analyze -f ~/projetos/meu-app
+
+# 5. Gerar relatórios Markdown apenas para a pasta especificada
+uv run ctrl_prj report ~/projetos/meu-app
+
+# 6. Executar o fluxo completo (scan -> analyze -> report) em um projeto
+uv run ctrl_prj run ~/projetos/meu-app
+```
+
+### Exemplos no Windows (PowerShell / CMD):
+```powershell
+# 1. Escanear apenas a pasta do OpenWebUI
+uv run ctrl_prj scan D:\Projetos\openwebui
+
+# 2. Escanear múltiplos projetos usando a flag -p / --paths
+uv run ctrl_prj scan -p D:\Projetos\openwebui D:\Projetos\outro-projeto
+
+# 3. Analisar com IA apenas o projeto alvo
+uv run ctrl_prj analyze D:\Projetos\openwebui
+
+# 4. Executar o pipeline completo apenas para o projeto alvo
+uv run ctrl_prj run D:\Projetos\openwebui
+```
+
+---
+
 ## 🛠️ Comandos da CLI
 
 Você pode executar os comandos da CLI diretamente com `uv run ctrl_prj`:
@@ -180,16 +226,14 @@ Você pode executar os comandos da CLI diretamente com `uv run ctrl_prj`:
 Descobre entidades, varre arquivos relevantes, calcula hashes e atualiza o estado no SQLite. Não utiliza LLM.
 
 ```bash
-# Escanear todas as raízes e projetos configurados no config.yml
+# Escanear todas as raízes e projetos do config.yml:
 uv run ctrl_prj scan
 
-# Escanear apenas um projeto ou pasta específica diretamente via CLI:
-uv run ctrl_prj scan /caminho/meu-projeto
+# Escanear apenas projetos/pastas específicas:
+uv run ctrl_prj scan /caminho/projeto1 /caminho/projeto2
+uv run ctrl_prj scan -p /caminho/projeto1
 
-# Escanear múltiplos caminhos específicos:
-uv run ctrl_prj scan /caminho/proj1 /caminho/proj2
-
-# Forçar sincronização e purga de arquivos excluídos em todas as entidades:
+# Forçar sincronização e purga de arquivos excluídos:
 uv run ctrl_prj scan --force   # ou -f
 ```
 
@@ -197,28 +241,28 @@ uv run ctrl_prj scan --force   # ou -f
 Consulta entidades pendentes (`new`, `changed`, `error`) no SQLite, extrai a estrutura de código, monta o contexto e executa a análise com o LLM configurado.
 
 ```bash
-# Analisar todas as entidades pendentes
+# Analisar todas as entidades pendentes:
 uv run ctrl_prj analyze
 
-# Analisar apenas um projeto específico via CLI:
-uv run ctrl_prj analyze /caminho/meu-projeto
+# Analisar apenas uma pasta/projeto específico:
+uv run ctrl_prj analyze /caminho/projeto1
 
-# Forçar reanálise com IA de todas as entidades (mesmo já analisadas):
+# Forçar reanálise de todas as entidades:
 uv run ctrl_prj analyze --force # ou -f
 
 # Forçar reanálise de apenas um projeto específico:
-uv run ctrl_prj analyze -f /caminho/meu-projeto
+uv run ctrl_prj analyze -f /caminho/projeto1
 ```
 
 ### 3. `ctrl_prj report`
 Gera os relatórios individuais (`reports/projects/{device}-*.md`) e o catálogo mestre ([`reports/{device}-INDEX.md`](reports/)) agrupado por origens e categorias semânticas.
 
 ```bash
-# Gerar relatórios para todas as entidades
+# Gerar relatórios para todas as entidades:
 uv run ctrl_prj report
 
-# Gerar relatórios apenas para os projetos especificados:
-uv run ctrl_prj report /caminho/meu-projeto
+# Gerar relatórios apenas para as pastas/projetos especificados:
+uv run ctrl_prj report /caminho/projeto1
 
 # Especificando pasta de saída customizada:
 uv run ctrl_prj report -o ./meus_relatorios
@@ -228,13 +272,13 @@ uv run ctrl_prj report -o ./meus_relatorios
 Executa o pipeline completo de ponta a ponta (`scan` → `analyze` → `report`):
 
 ```bash
-# Pipeline completo em todo o repositório
+# Pipeline completo para todos os projetos do config.yml:
 uv run ctrl_prj run
 
-# Pipeline completo direcionado a um projeto ou pasta específica:
+# Pipeline completo direcionado exclusivamente a um projeto ou pasta:
 uv run ctrl_prj run /caminho/meu-projeto
 
-# Pipeline completo forçando re-escaneamento e reanálise total:
+# Pipeline completo forçando re-escaneamento e reanálise:
 uv run ctrl_prj run --force     # ou -f
 ```
 
